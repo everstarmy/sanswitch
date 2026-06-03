@@ -1,0 +1,6 @@
+docs
+vendor
+.git
+.idea
+.vscode
+.gocache
