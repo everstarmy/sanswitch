@@ -156,7 +156,7 @@ func main() {
 	}
 	fmt.Printf("传感器数量: %d\n", len(sensors))
 	for _, sensor := range sensors {
-		fmt.Printf("传感器 %s (类型: %s): 值=%d, 状态=%s\n",
+		fmt.Printf("传感器 %d (类型: %s): 值=%d, 状态=%s\n",
 			sensor.Index, sensor.Category, sensor.Temperature, sensor.State)
 	}
 
