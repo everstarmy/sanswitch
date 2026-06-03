@@ -16,12 +16,19 @@ type SwitchInfo struct {
 	Principal       bool   `json:"principal"`
 }
 
+type ZoneMember struct {
+	MemberEntries    []string `json:"member"`
+	PrincipalEntries []string `json:"principal"`
+}
+
 // ZoneInfo 表示一个 Zone（已定义或已生效），包含名称、成员列表和类型
 type ZoneInfo struct {
-	Name        string   `json:"name"`
-	Members     []string `json:"members"`
-	Description string   `json:"description"`
-	Type        string   `json:"type"`
+	Name    string     `json:"name"`
+	Members ZoneMember `json:"members"`
+
+	Description string `json:"description"`
+	Type        string `json:"type"`
+	TypeString  string `json:"type_string"`
 }
 
 // AliasInfo 表示一个 Zone Alias，包含名称和成员列表

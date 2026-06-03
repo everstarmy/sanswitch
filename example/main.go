@@ -134,8 +134,8 @@ func main() {
 	}
 	fmt.Printf("风扇数量: %d\n", len(fans))
 	for _, fan := range fans {
-		fmt.Printf("风扇单元%d (类型: %s): 状态=%s, 转速=%d RPM\n",
-			fan.UnitNumber, fan.FanTypeString, fan.FanStateString, fan.SpeedRPM)
+		fmt.Printf("风扇单元%d: 状态=%s, 转速=%d RPM\n",
+			fan.UnitNumber, fan.OperationalState, fan.SpeedRPM)
 	}
 
 	fmt.Println("\n=== 获取电源信息 ===")
@@ -145,8 +145,8 @@ func main() {
 	}
 	fmt.Printf("电源数量: %d\n", len(psus))
 	for _, psu := range psus {
-		fmt.Printf("电源单元%d (类型: %s): 状态=%s, 输入功率=%dW\n",
-			psu.UnitNumber, psu.PowerSupplyTypeString, psu.PowerSupplyStateString, psu.InputPower)
+		fmt.Printf("电源单元%d: 状态=%s, 输入功率=%dW\n",
+			psu.UnitNumber, psu.OperationalState, psu.InputPower)
 	}
 
 	fmt.Println("\n=== 获取传感器信息 ===")
@@ -156,8 +156,8 @@ func main() {
 	}
 	fmt.Printf("传感器数量: %d\n", len(sensors))
 	for _, sensor := range sensors {
-		fmt.Printf("传感器 %s (类型: %s): 值=%d %s, 状态=%s\n",
-			sensor.Name, sensor.TypeString, sensor.Value, sensor.UnitString, sensor.StatusString)
+		fmt.Printf("传感器 %s (类型: %s): 值=%d, 状态=%s\n",
+			sensor.Index, sensor.Category, sensor.Temperature, sensor.State)
 	}
 
 	fmt.Println("\n=== 获取FRU历史日志 ===")

@@ -38,7 +38,7 @@ type EffectiveZoneAPI struct {
 // EffectiveZoneResponse 是 GET /brocade-zone/effective-configuration/enabled-zone 的 XML 响应包装
 type EffectiveZoneResponse struct {
 	XMLName xml.Name           `xml:"Response"`
-	Zones   []EffectiveZoneAPI `xml:"enabled-zone"`
+	Zones   []EffectiveZoneAPI `xml:"effective-configuration>enabled-zone"`
 }
 
 // GetDefinedZones 获取 Zone 定义配置中的所有 Zone 列表。
@@ -53,12 +53,12 @@ func (c *Client) GetDefinedZones() ([]ZoneInfo, error) {
 
 	var zones []ZoneInfo
 	for _, z := range resp.Zones {
-		members := append(z.MemberEntryNames, z.PrincipalEntryNames...)
 		zones = append(zones, ZoneInfo{
 			Name:        z.Name,
-			Members:     members,
+			Members:     ZoneMember{MemberEntries: z.MemberEntryNames, PrincipalEntries: z.PrincipalEntryNames},
 			Description: z.ZoneTypeString,
 			Type:        z.ZoneType,
+			TypeString:  z.ZoneTypeString,
 		})
 	}
 
@@ -77,12 +77,12 @@ func (c *Client) GetEffectiveZones() ([]ZoneInfo, error) {
 
 	var zones []ZoneInfo
 	for _, z := range resp.Zones {
-		members := append(z.MemberEntryNames, z.PrincipalEntryNames...)
 		zones = append(zones, ZoneInfo{
 			Name:        z.Name,
-			Members:     members,
+			Members:     ZoneMember{MemberEntries: z.MemberEntryNames, PrincipalEntries: z.PrincipalEntryNames},
 			Description: z.ZoneTypeString,
 			Type:        z.ZoneType,
+			TypeString:  z.ZoneTypeString,
 		})
 	}
 
