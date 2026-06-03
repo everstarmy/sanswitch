@@ -33,15 +33,17 @@ const definedZoneXML = `<?xml version="1.0" encoding="UTF-8"?>
 
 const effectiveZoneXML = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <enabled-zone>
-    <zone-name>zone_A</zone-name>
-    <zone-type>0</zone-type>
-    <zone-type-string>zone</zone-type-string>
-    <member-entry>
-      <entry-name>10:00:00:00:c9:f8:04:35</entry-name>
-      <entry-name>20:00:00:00:c9:f8:04:35</entry-name>
-    </member-entry>
-  </enabled-zone>
+  <effective-configuration>
+	<enabled-zone>
+		<zone-name>zone_A</zone-name>
+		<zone-type>0</zone-type>
+		<zone-type-string>zone</zone-type-string>
+		<member-entry>
+		<entry-name>10:00:00:00:c9:f8:04:35</entry-name>
+		<entry-name>20:00:00:00:c9:f8:04:35</entry-name>
+		</member-entry>
+	</enabled-zone>
+  </effective-configuration>
 </Response>`
 
 const transactionTokenXML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -96,8 +98,8 @@ func TestGetDefinedZones(t *testing.T) {
 	if z.Name != "zone_A" {
 		t.Errorf("unexpected zone name: %q", z.Name)
 	}
-	if len(z.Members) != 2 {
-		t.Errorf("expected 2 members, got %d", len(z.Members))
+	if len(z.Members.MemberEntries) != 2 {
+		t.Errorf("expected 2 members, got %d", len(z.Members.MemberEntries))
 	}
 
 	z2 := zones[1]
@@ -105,8 +107,8 @@ func TestGetDefinedZones(t *testing.T) {
 		t.Errorf("unexpected zone name: %q", z2.Name)
 	}
 	// zone_B has 2 entry-name + 1 principal-entry-name = 3 members
-	if len(z2.Members) != 3 {
-		t.Errorf("expected 3 members for zone_B, got %d", len(z2.Members))
+	if len(z2.Members.MemberEntries)+len(z2.Members.PrincipalEntries) != 3 {
+		t.Errorf("expected 3 members for zone_B, got %d", len(z2.Members.MemberEntries)+len(z2.Members.PrincipalEntries))
 	}
 }
 
