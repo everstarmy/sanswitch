@@ -17,7 +17,7 @@ type ZoneTransactionStatusResponse struct {
 // AbortZoneTransaction 中止当前挂起的 Zone 事务（释放事务锁）
 // 对应 API: PATCH /brocade-zone/effective-configuration/cfg-action-v2/transaction-abort
 func (c *Client) AbortZoneTransaction() error {
-	return c.Patch("/brocade-zone/effective-configuration/cfg-action-v2/transaction-abort", nil)
+	return c.Patch(c.endpoints().ZoneAbortTransaction(), nil)
 }
 
 // GetZoneTransactionStatus 查询当前 Zone 事务状态
@@ -25,7 +25,7 @@ func (c *Client) AbortZoneTransaction() error {
 // 对应 API: GET /brocade-zone/effective-configuration/transaction-token
 func (c *Client) GetZoneTransactionStatus() (*ZoneTransactionStatus, error) {
 	var resp ZoneTransactionStatusResponse
-	err := c.Get("/brocade-zone/effective-configuration/transaction-token", &resp)
+	err := c.Get(c.endpoints().ZoneTransactionStatus(), &resp)
 	if err != nil {
 		return nil, err
 	}

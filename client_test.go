@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -41,6 +42,111 @@ func TestLogin(t *testing.T) {
 	}
 	if resp.Model != "G620" {
 		t.Errorf("expected model 'G620', got %q", resp.Model)
+	}
+}
+
+func TestLoginConfiguresFOS91SaveEndpoint(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Authorization", "Bearer test-token-12345")
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(strings.Replace(loginXML, "v9.2.0a", "v9.1.1", 1)))
+	})
+	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-action/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Errorf("expected PATCH, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+
+	if _, err := c.Login(); err != nil {
+		t.Fatalf("Login() error: %v", err)
+	}
+	if err := c.SaveZoneConfig("abc"); err != nil {
+		t.Fatalf("SaveZoneConfig() error: %v", err)
+	}
+}
+
+func TestLoginWithoutBodyMarksLegacyVersionAndBlocksWrites(t *testing.T) {
+	var postCalled bool
+	var patchCalled bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Authorization", "Bearer test-token-12345")
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/rest/running/test/create", func(w http.ResponseWriter, r *http.Request) {
+		postCalled = true
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/rest/running/test/update", func(w http.ResponseWriter, r *http.Request) {
+		patchCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+
+	resp, err := c.Login()
+	if err != nil {
+		t.Fatalf("Login() error: %v", err)
+	}
+	if resp.FirmwareVersion != "" {
+		t.Fatalf("expected empty firmware version, got %q", resp.FirmwareVersion)
+	}
+	if err := c.Post("/test/create", nil); !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("expected ErrUnsupportedOperation for POST, got %v", err)
+	}
+	if err := c.Patch("/test/update", nil); !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("expected ErrUnsupportedOperation for PATCH, got %v", err)
+	}
+	if postCalled || patchCalled {
+		t.Fatalf("expected write requests to be blocked before HTTP call; post=%v patch=%v", postCalled, patchCalled)
+	}
+}
+
+func TestLoginNoContentMarksLegacyVersion(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Authorization", "Bearer test-token-12345")
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+
+	resp, err := c.Login()
+	if err != nil {
+		t.Fatalf("Login() error: %v", err)
+	}
+	if resp.FirmwareVersion != "" {
+		t.Fatalf("expected empty firmware version, got %q", resp.FirmwareVersion)
+	}
+	if err := c.Patch("/test/update", nil); !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("expected ErrUnsupportedOperation for PATCH, got %v", err)
+	}
+}
+
+func TestFOSVersionBelow91BlocksWrites(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/test/create", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("POST should not be sent for FOS < 9.1")
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password", WithFOSVersion("v8.2.3"))
+	c.baseURL = ts.URL + "/rest/running"
+
+	if err := c.Post("/test/create", nil); !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("expected ErrUnsupportedOperation, got %v", err)
 	}
 }
 

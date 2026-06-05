@@ -70,6 +70,14 @@ func WithHTTP() ClientOption {
 	}
 }
 
+// WithFOSVersion 设置 Fabric OS 版本，用于兼容不同版本的 REST endpoint。
+// NewSANSwitch 会在登录后自动记录版本；直接使用 NewClient 时可用该选项显式指定。
+func WithFOSVersion(version string) ClientOption {
+	return func(c *Client) {
+		c.fosVersion = version
+	}
+}
+
 // Client 是 Brocade FOS REST API 的 HTTP 客户端，封装了认证、请求发送、重试、
 // 日志、Virtual Fabric 路由等核心功能。
 // 通过 NewClient 创建实例，或使用 NewSANSwitch 自动完成登录。
@@ -88,6 +96,7 @@ type Client struct {
 	retryCount       int
 	retryWaitTime    time.Duration
 	retryMaxWaitTime time.Duration
+	fosVersion       string
 }
 
 // LoginResponse 是 POST /login 的 XML 响应，包含登录后的用户信息和交换机参数
@@ -201,18 +210,17 @@ func (c *Client) SetVFID(vfID int) {
 // 成功后将 Token 设置到后续请求的 Authorization 头中。
 // 对应 API: POST /rest/login
 func (c *Client) Login() (*LoginResponse, error) {
-	url := c.restBase() + "/login"
+	url := c.restBase() + c.endpoints().Login()
 
 	resp, err := c.client.R().
 		SetHeader("Authorization", "Basic "+base64Encode(c.username+":"+c.password)).
-		SetResult(&LoginResponse{}).
 		Post(url)
 
 	if err != nil {
 		return nil, fmt.Errorf("login failed: %w", err)
 	}
 
-	if resp.StatusCode() != http.StatusOK {
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
 		return nil, fmt.Errorf("login failed with status %d: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
@@ -226,13 +234,24 @@ func (c *Client) Login() (*LoginResponse, error) {
 		c.client.SetHeader("Authorization", c.authToken)
 	}
 
-	return resp.Result().(*LoginResponse), nil
+	if len(resp.Body()) == 0 {
+		c.fosVersion = legacyFOSVersion
+		return &LoginResponse{}, nil
+	}
+
+	var result LoginResponse
+	if err := xml.Unmarshal(resp.Body(), &result); err != nil {
+		return nil, fmt.Errorf("login response: %w", err)
+	}
+	c.fosVersion = result.FirmwareVersion
+
+	return &result, nil
 }
 
 // Logout 注销当前会话，清除认证 Token。
 // 对应 API: POST /rest/logout
 func (c *Client) Logout() error {
-	url := c.restBase() + "/logout"
+	url := c.restBase() + c.endpoints().Logout()
 
 	resp, err := c.client.R().Post(url)
 
@@ -314,6 +333,9 @@ func (c *Client) Get(endpoint string, result interface{}) error {
 
 // Post 执行 POST 请求，将 payload 序列化为 XML 发送到指定端点
 func (c *Client) Post(endpoint string, payload interface{}) error {
+	if err := c.ensureWriteSupported(); err != nil {
+		return err
+	}
 	url := c.buildURL(endpoint)
 
 	var reqBody []byte
@@ -351,6 +373,9 @@ func (c *Client) Post(endpoint string, payload interface{}) error {
 
 // Patch 执行 PATCH 请求，将 payload 序列化为 XML 发送到指定端点
 func (c *Client) Patch(endpoint string, payload interface{}) error {
+	if err := c.ensureWriteSupported(); err != nil {
+		return err
+	}
 	url := c.buildURL(endpoint)
 
 	var reqBody []byte
@@ -461,6 +486,9 @@ func (c *Client) GetWithContext(ctx context.Context, endpoint string, result int
 
 // PostWithContext 执行带 context 的 POST 请求
 func (c *Client) PostWithContext(ctx context.Context, endpoint string, payload interface{}) error {
+	if err := c.ensureWriteSupported(); err != nil {
+		return err
+	}
 	url := c.buildURL(endpoint)
 
 	var reqBody []byte
@@ -497,6 +525,9 @@ func (c *Client) PostWithContext(ctx context.Context, endpoint string, payload i
 
 // PatchWithContext 执行带 context 的 PATCH 请求
 func (c *Client) PatchWithContext(ctx context.Context, endpoint string, payload interface{}) error {
+	if err := c.ensureWriteSupported(); err != nil {
+		return err
+	}
 	url := c.buildURL(endpoint)
 
 	var reqBody []byte
@@ -556,4 +587,11 @@ func (c *Client) DeleteWithContext(ctx context.Context, endpoint string) error {
 // base64Encode 对字符串进行 Base64 编码，用于 Basic Auth 认证
 func base64Encode(s string) string {
 	return base64.StdEncoding.EncodeToString([]byte(s))
+}
+
+func (c *Client) ensureWriteSupported() error {
+	if c.endpoints().allowWrite() {
+		return nil
+	}
+	return fmt.Errorf("%w: FOS %s does not support POST/PATCH operations", ErrUnsupportedOperation, c.endpoints().version)
 }

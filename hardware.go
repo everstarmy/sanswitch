@@ -30,7 +30,7 @@ type HardwareInfo struct {
 // 对应 API: GET /brocade-chassis/chassis
 func (c *Client) GetHardwareInfo() (*HardwareInfo, error) {
 	var resp ChassisResponse
-	err := c.Get("/brocade-chassis/chassis", &resp)
+	err := c.Get(c.endpoints().Chassis(), &resp)
 	if err != nil {
 		return nil, err
 	}

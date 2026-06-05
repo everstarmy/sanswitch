@@ -75,7 +75,7 @@ type TrunkAreaInfo struct {
 // GetTrunks 获取交换机上所有 Trunk 成员列表
 func (c *Client) GetTrunks() ([]TrunkInfo, error) {
 	var resp TrunkResponse
-	err := c.Get("/brocade-fibrechannel-trunk/trunk", &resp)
+	err := c.Get(c.endpoints().Trunks(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (c *Client) GetTrunks() ([]TrunkInfo, error) {
 // GetTrunkPerformances 获取所有 Trunk 的性能统计
 func (c *Client) GetTrunkPerformances() ([]TrunkPerformanceInfo, error) {
 	var resp TrunkPerformanceResponse
-	err := c.Get("/brocade-fibrechannel-trunk/performance", &resp)
+	err := c.Get(c.endpoints().TrunkPerformances(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (c *Client) GetTrunkPerformances() ([]TrunkPerformanceInfo, error) {
 // GetTrunkAreas 获取所有 Trunk Area 组信息
 func (c *Client) GetTrunkAreas() ([]TrunkAreaInfo, error) {
 	var resp TrunkAreaResponse
-	err := c.Get("/brocade-fibrechannel-trunk/trunk-area", &resp)
+	err := c.Get(c.endpoints().TrunkAreas(), &resp)
 	if err != nil {
 		return nil, err
 	}

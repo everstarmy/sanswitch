@@ -29,7 +29,7 @@ type LogicalSwitchInfo struct {
 // 对应 API: GET /brocade-fibrechannel-logical-switch/fibrechannel-logical-switch
 func (c *Client) GetLogicalSwitches() ([]LogicalSwitchInfo, error) {
 	var resp LogicalSwitchResponse
-	err := c.Get("/brocade-fibrechannel-logical-switch/fibrechannel-logical-switch", &resp)
+	err := c.Get(c.endpoints().LogicalSwitches(), &resp)
 	if err != nil {
 		return nil, err
 	}

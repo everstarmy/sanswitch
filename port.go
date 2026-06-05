@@ -119,7 +119,7 @@ type PortInfo struct {
 // 对应 API: GET /brocade-interface/fibrechannel
 func (c *Client) GetPorts() ([]PortInfo, error) {
 	var resp FibreChannelResponse
-	err := c.Get("/brocade-interface/fibrechannel", &resp)
+	err := c.Get(c.endpoints().FibreChannelPorts(), &resp)
 	if err != nil {
 		return nil, err
 	}

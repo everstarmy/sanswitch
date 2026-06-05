@@ -47,7 +47,7 @@ type FibreChannelNameServerInfo struct {
 // 对应 API: GET /brocade-name-server/fibrechannel-name-server
 func (c *Client) GetFibreChannelNameServers() ([]FibreChannelNameServerInfo, error) {
 	var resp FibreChannelNameServerResponse
-	err := c.Get("/brocade-name-server/fibrechannel-name-server", &resp)
+	err := c.Get(c.endpoints().NameServer(), &resp)
 	if err != nil {
 		return nil, err
 	}

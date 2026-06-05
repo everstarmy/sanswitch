@@ -42,7 +42,7 @@ type FDMIHBAInfo struct {
 // 对应 API: GET /brocade-fdmi/hba
 func (c *Client) GetFDMIHBAs() ([]FDMIHBAInfo, error) {
 	var resp FDMIHBAResponse
-	err := c.Get("/brocade-fdmi/hba", &resp)
+	err := c.Get(c.endpoints().FDMIHBAs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ type FDMIportInfo struct {
 // 对应 API: GET /brocade-fdmi/port
 func (c *Client) GetFDMIports() ([]FDMIportInfo, error) {
 	var resp FDMIResponse
-	err := c.Get("/brocade-fdmi/port", &resp)
+	err := c.Get(c.endpoints().FDMIPorts(), &resp)
 	if err != nil {
 		return nil, err
 	}

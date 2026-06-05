@@ -68,6 +68,7 @@ sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password",
 	san.WithRetry(5),                      // 重试次数（默认 3）
 	san.WithRetryWait(2*time.Second),      // 重试初始等待（默认 1s）
 	san.WithRetryMaxWait(60*time.Second),  // 重试最大等待（默认 30s）
+	san.WithFOSVersion("v9.1.1"),          // 可选：直接使用 Client 时指定 FOS 版本
 	san.WithLogger(myLogger),              // 注入自定义 slog.Logger
 )
 
@@ -83,9 +84,12 @@ sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password",
 | `WithRetry(n)` | `3` | 最大重试次数 |
 | `WithRetryWait(d)` | `1s` | 重试初始等待（指数退避起点） |
 | `WithRetryMaxWait(d)` | `30s` | 重试最大等待上限 |
+| `WithFOSVersion(v)` | 自动登录识别 / 默认 9.2+ | 指定 FOS 版本以兼容版本差异 endpoint |
 | `WithLogger(l)` | `slog.Default()` | 自定义结构化日志 |
 | `WithHTTP()` | HTTPS | 使用 HTTP 替代 HTTPS |
 ```
+
+版本识别规则：登录响应包含 `firmware-version` 时会自动记录版本，并按 `vX.Y` 选择兼容 endpoint；若登录无响应体，则按低于 9.1 的旧版 FOS 处理。低于 9.1 的版本不允许执行 `POST` / `PATCH` 写操作。`GetHistoryLogs`、`GetSensors`、`GetErrorLogs` 和 `GetAuditLogs` 需要 FOS 9.0+，`GetFirmwareHistory` 需要 FOS 9.1+。
 
 ### 调试日志
 
@@ -146,6 +150,7 @@ sw.SetVFID(0)   // 设回 0 可取消 VFID
 | 方法 | REST 端点 | 说明 |
 |------|----------|------|
 | `GetDefinedZones()` | `/brocade-zone/defined-configuration/zone` | 获取已定义的 Zone |
+| `GetDefinedZone(name)` | `/brocade-zone/defined-configuration/zone/zone-name/{name}` | 获取指定已定义 Zone |
 | `GetEffectiveZones()` | `/brocade-zone/effective-configuration/enabled-zone` | 获取生效的 Zone |
 | `GetDefinedAliases()` | `/brocade-zone/defined-configuration/alias` | 获取已定义的 Alias |
 | `GetDefinedConfigs()` | `/brocade-zone/defined-configuration/cfg` | 获取已定义的 Zone 配置 |
@@ -161,7 +166,7 @@ sw.SetVFID(0)   // 设回 0 可取消 VFID
 | `RenameAlias(oldName, newName)` | `PATCH /brocade-zone/defined-configuration/alias/alias-name/{oldName}` | 重命名 Alias，不自动生效 |
 | `DeleteAlias(name)` | `DELETE /brocade-zone/defined-configuration/alias/alias-name/{name}` | 删除 Alias |
 | `UpdateDefinedConfig(name, memberZones)` | `PATCH /brocade-zone/defined-configuration/cfg` | 全量替换 cfg 成员 Zone |
-| `SaveZoneConfig(checksum)` | `PATCH /brocade-zone/effective-configuration/cfg-action-v2/save` | 保存 Zone 配置 |
+| `SaveZoneConfig(checksum)` | 9.2+: `PATCH /brocade-zone/effective-configuration/cfg-action-v2/save`; 9.1: `PATCH /brocade-zone/effective-configuration/cfg-action/1` | 保存 Zone 配置 |
 | `ActivateZoneConfig(name, checksum)` | `PATCH /brocade-zone/effective-configuration/cfg-name/{name}` | 激活 Zone 配置 |
 | `CreateZoneAndActivate(cfg, zone, members, principalMembers)` | 组合流程 | 创建 Zone、加入 cfg、保存并激活 |
 | `ReplaceZoneAndActivate(cfg, zone, members, principalMembers)` | 组合流程 | 全量替换 Zone 成员、保存并激活 |
@@ -180,7 +185,21 @@ err := sw.CreateZoneAndActivate(
 )
 ```
 
-注意：`UpdateZone` 和 `ReplaceZoneAndActivate` 会按 Brocade REST API 语义全量覆盖 `member-entry` leaf-list，请传入所有需要保留的成员。
+创建时如果传入 `principalMembers`，请求体会自动使用 `zone-type-string=user-created-peer-zone`：
+
+```go
+err := sw.CreateZone(
+	"peer_zone_app01",
+	[]string{
+		"10:10:10:27:f8:f0:2a:e8",
+		"10:10:10:27:f8:f0:3a:70",
+		"10:10:10:27:f8:f0:38:65",
+	},
+	[]string{"10:10:10:27:f8:8f:44:cd"},
+)
+```
+
+注意：`CreateZone` 会先检查同名 Zone 是否已存在，`UpdateZone` 和 `DeleteZone` 会先检查目标 Zone 是否存在。`UpdateZone` 和 `ReplaceZoneAndActivate` 会按 Brocade REST API 语义全量覆盖 `member-entry` leaf-list，请传入所有需要保留的成员。更新已有 Zone 时会沿用当前 defined zone 的 `zone-type-string`，不会在 `zone` 和 `user-created-peer-zone` 之间转换。
 
 ### 5. FRU 组件
 

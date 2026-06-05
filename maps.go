@@ -106,7 +106,7 @@ type SystemResourcesInfo struct {
 // 对应 API: GET /brocade-maps/switch-status-policy-report
 func (c *Client) GetSwitchStatusPolicyReport() (*SwitchStatusPolicyReportInfo, error) {
 	var resp SwitchStatusPolicyReportResponse
-	err := c.Get("/brocade-maps/switch-status-policy-report", &resp)
+	err := c.Get(c.endpoints().SwitchStatusPolicyReport(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (c *Client) GetSwitchStatusPolicyReport() (*SwitchStatusPolicyReportInfo, e
 // 对应 API: GET /brocade-maps/system-resources
 func (c *Client) GetSystemResources() (*SystemResourcesInfo, error) {
 	var resp SystemResourcesResponse
-	err := c.Get("/brocade-maps/system-resources", &resp)
+	err := c.Get(c.endpoints().SystemResources(), &resp)
 	if err != nil {
 		return nil, err
 	}

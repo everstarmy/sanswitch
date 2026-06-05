@@ -33,7 +33,7 @@ type FabricSwitch struct {
 // 对应 API: GET /brocade-fabric/fabric-switch
 func (c *Client) GetFabricSwitches() ([]FabricSwitch, error) {
 	var resp FabricSwitchResponse
-	err := c.Get("/brocade-fabric/fabric-switch", &resp)
+	err := c.Get(c.endpoints().FabricSwitches(), &resp)
 	if err != nil {
 		return nil, err
 	}

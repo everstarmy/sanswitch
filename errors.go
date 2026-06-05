@@ -17,6 +17,8 @@ var (
 	ErrInvalidResponse = errors.New("invalid response from server")
 	// ErrTimeout 请求超时
 	ErrTimeout = errors.New("request timeout")
+	// ErrUnsupportedOperation 当前 FOS 版本不支持该操作
+	ErrUnsupportedOperation = errors.New("operation unsupported by FOS version")
 )
 
 // APIError 表示 FOS REST API 返回的结构化错误

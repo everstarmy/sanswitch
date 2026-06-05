@@ -3,8 +3,15 @@ package san
 import (
 	"encoding/xml"
 	"errors"
-	"net/url"
+	"net/http"
 	"strings"
+)
+
+const (
+	// ZoneTypeZone 表示普通 user-created zone 的 zone-type-string。
+	ZoneTypeZone = "zone"
+	// ZoneTypeUserCreatedPeerZone 表示 peer zone 的 zone-type-string。
+	ZoneTypeUserCreatedPeerZone = "user-created-peer-zone"
 )
 
 // DefinedZoneAPI 表示 Zone 定义配置中的 Zone（用于 XML 请求/响应序列化）。
@@ -12,7 +19,7 @@ import (
 type DefinedZoneAPI struct {
 	XMLName             xml.Name `xml:"zone"`
 	Name                string   `xml:"zone-name"`
-	ZoneType            string   `xml:"zone-type"`
+	ZoneType            string   `xml:"zone-type,omitempty"`
 	ZoneTypeString      string   `xml:"zone-type-string"`
 	MemberEntryNames    []string `xml:"member-entry>entry-name"`           // 普通成员列表
 	PrincipalEntryNames []string `xml:"member-entry>principal-entry-name"` // Principal 成员列表
@@ -46,7 +53,7 @@ type EffectiveZoneResponse struct {
 // 对应 API: GET /brocade-zone/defined-configuration/zone
 func (c *Client) GetDefinedZones() ([]ZoneInfo, error) {
 	var resp DefinedZoneResponse
-	err := c.Get("/brocade-zone/defined-configuration/zone", &resp)
+	err := c.Get(c.endpoints().DefinedZones(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +72,29 @@ func (c *Client) GetDefinedZones() ([]ZoneInfo, error) {
 	return zones, nil
 }
 
+// GetDefinedZone 获取 Zone 定义配置中的单个 Zone。
+// 对应 API: GET /brocade-zone/defined-configuration/zone/zone-name/{name}
+func (c *Client) GetDefinedZone(name string) (*ZoneInfo, error) {
+	var resp DefinedZoneResponse
+	if err := c.Get(c.endpoints().DefinedZone(name), &resp); err != nil {
+		if isNotFoundError(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if len(resp.Zones) == 0 {
+		return nil, ErrNotFound
+	}
+	zone := zoneInfoFromDefinedZone(resp.Zones[0])
+	return &zone, nil
+}
+
 // GetEffectiveZones 获取已生效配置中的所有 Zone 列表。
 // 返回的 ZoneInfo 中 Members 字段包含普通成员和 Principal 成员的合并列表。
 // 对应 API: GET /brocade-zone/effective-configuration/enabled-zone
 func (c *Client) GetEffectiveZones() ([]ZoneInfo, error) {
 	var resp EffectiveZoneResponse
-	err := c.Get("/brocade-zone/effective-configuration/enabled-zone", &resp)
+	err := c.Get(c.endpoints().EffectiveZones(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -93,13 +117,16 @@ func (c *Client) GetEffectiveZones() ([]ZoneInfo, error) {
 // members 为普通成员（entry-name），principalMembers 为 Principal 成员（principal-entry-name）。
 // 对应 API: POST /brocade-zone/defined-configuration/zone
 func (c *Client) CreateZone(name string, members []string, principalMembers []string) error {
+	if err := c.ensureZoneAbsent(name); err != nil {
+		return err
+	}
 	payload := DefinedZoneAPI{
 		Name:                name,
-		ZoneTypeString:      "zone",
+		ZoneTypeString:      zoneTypeStringForCreate(principalMembers),
 		MemberEntryNames:    members,
 		PrincipalEntryNames: principalMembers,
 	}
-	return c.Post("/brocade-zone/defined-configuration/zone", payload)
+	return c.Post(c.endpoints().DefinedZones(), payload)
 }
 
 // CreateZoneAndActivate 执行完整的 Zone 创建并激活流程：
@@ -141,13 +168,17 @@ func (c *Client) CreateZoneAndActivate(cfgName, zoneName string, members []strin
 // members 为普通成员，principalMembers 为 Principal 成员。
 // 对应 API: PATCH /brocade-zone/defined-configuration/zone
 func (c *Client) UpdateZone(name string, members []string, principalMembers []string) error {
+	zoneTypeString, err := c.zoneTypeStringForUpdate(name, principalMembers)
+	if err != nil {
+		return err
+	}
 	payload := DefinedZoneAPI{
 		Name:                name,
-		ZoneTypeString:      "zone",
+		ZoneTypeString:      zoneTypeString,
 		MemberEntryNames:    members,
 		PrincipalEntryNames: principalMembers,
 	}
-	return c.Patch("/brocade-zone/defined-configuration/zone", payload)
+	return c.Patch(c.endpoints().DefinedZones(), payload)
 }
 
 // RenameZone 重命名 Zone 定义配置中的一个 Zone。
@@ -156,8 +187,7 @@ func (c *Client) RenameZone(oldName, newName string) error {
 	payload := DefinedZoneAPI{
 		Name: newName,
 	}
-	endpoint := "/brocade-zone/defined-configuration/zone/zone-name/" + url.PathEscape(oldName)
-	return c.Patch(endpoint, payload)
+	return c.Patch(c.endpoints().DefinedZone(oldName), payload)
 }
 
 // ReplaceZoneAndActivate 执行完整的 Zone 替换并激活流程：
@@ -182,8 +212,10 @@ func (c *Client) ReplaceZoneAndActivate(cfgName, zoneName string, members []stri
 // DeleteZone 从 Zone 定义配置中删除一个 Zone。
 // 对应 API: DELETE /brocade-zone/defined-configuration/zone/zone-name/{name}
 func (c *Client) DeleteZone(name string) error {
-	endpoint := "/brocade-zone/defined-configuration/zone/zone-name/" + url.PathEscape(name)
-	return c.Delete(endpoint)
+	if _, err := c.GetDefinedZone(name); err != nil {
+		return err
+	}
+	return c.Delete(c.endpoints().DefinedZone(name))
 }
 
 // DeleteZoneAndActivate 执行完整的 Zone 删除并激活流程：
@@ -232,6 +264,53 @@ func validateZoneActivationInput(cfgName, zoneName string, members []string) err
 		return errors.New("zone members required")
 	}
 	return nil
+}
+
+func zoneTypeStringForCreate(principalMembers []string) string {
+	if len(principalMembers) > 0 {
+		return ZoneTypeUserCreatedPeerZone
+	}
+	return ZoneTypeZone
+}
+
+func (c *Client) ensureZoneAbsent(name string) error {
+	_, err := c.GetDefinedZone(name)
+	if err == nil {
+		return errors.New("zone already exists")
+	}
+	if isNotFoundError(err) {
+		return nil
+	}
+	return err
+}
+
+func (c *Client) zoneTypeStringForUpdate(name string, principalMembers []string) (string, error) {
+	zone, err := c.GetDefinedZone(name)
+	if err != nil {
+		return "", err
+	}
+	if zone.TypeString == ZoneTypeZone && len(principalMembers) > 0 {
+		return "", errors.New("cannot convert zone to peer zone")
+	}
+	return zone.TypeString, nil
+}
+
+func zoneInfoFromDefinedZone(z DefinedZoneAPI) ZoneInfo {
+	return ZoneInfo{
+		Name:        z.Name,
+		Members:     ZoneMember{MemberEntries: z.MemberEntryNames, PrincipalEntries: z.PrincipalEntryNames},
+		Description: z.ZoneTypeString,
+		Type:        z.ZoneType,
+		TypeString:  z.ZoneTypeString,
+	}
+}
+
+func isNotFoundError(err error) bool {
+	if errors.Is(err, ErrNotFound) {
+		return true
+	}
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
 
 // memberZonesForConfig 从已定义的 cfg 列表中查找指定配置名称的成员 Zone 列表

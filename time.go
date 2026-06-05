@@ -40,7 +40,7 @@ type ClockServerInfo struct {
 // GetTimeZone 获取交换机时区配置
 func (c *Client) GetTimeZone() (*TimeZoneInfo, error) {
 	var resp TimeZoneResponse
-	err := c.Get("/brocade-time/time-zone", &resp)
+	err := c.Get(c.endpoints().TimeZone(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (c *Client) GetTimeZone() (*TimeZoneInfo, error) {
 // GetClockServer 获取交换机 NTP 时钟服务器配置
 func (c *Client) GetClockServer() (*ClockServerInfo, error) {
 	var resp ClockServerResponse
-	err := c.Get("/brocade-time/clock-server", &resp)
+	err := c.Get(c.endpoints().ClockServer(), &resp)
 	if err != nil {
 		return nil, err
 	}

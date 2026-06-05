@@ -2,7 +2,6 @@ package san
 
 import (
 	"encoding/xml"
-	"net/url"
 )
 
 // DefinedConfigAPI 表示 Zone 定义配置中的 cfg（用于 XML 请求/响应序列化）
@@ -46,7 +45,7 @@ type EffectiveConfigResponse struct {
 // 对应 API: GET /brocade-zone/defined-configuration/cfg
 func (c *Client) GetDefinedConfigs() ([]ConfigInfo, error) {
 	var resp DefinedConfigResponse
-	err := c.Get("/brocade-zone/defined-configuration/cfg", &resp)
+	err := c.Get(c.endpoints().DefinedConfigs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +66,7 @@ func (c *Client) GetDefinedConfigs() ([]ConfigInfo, error) {
 // 对应 API: GET /brocade-zone/effective-configuration
 func (c *Client) GetEffectiveConfig() (*ConfigInfo, error) {
 	var resp EffectiveConfigResponse
-	err := c.Get("/brocade-zone/effective-configuration", &resp)
+	err := c.Get(c.endpoints().EffectiveConfig(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func (c *Client) GetEffectiveConfig() (*ConfigInfo, error) {
 // 对应 API: GET /brocade-zone/effective-configuration
 func (c *Client) GetZoneDatabaseInfo() (*ZoneDatabaseInfo, error) {
 	var resp EffectiveConfigResponse
-	err := c.Get("/brocade-zone/effective-configuration", &resp)
+	err := c.Get(c.endpoints().EffectiveConfig(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +105,7 @@ func (c *Client) GetZoneDatabaseInfo() (*ZoneDatabaseInfo, error) {
 // 对应 API: GET /brocade-zone/effective-configuration/checksum
 func (c *Client) GetZoneChecksum() (string, error) {
 	var resp EffectiveConfigResponse
-	err := c.Get("/brocade-zone/effective-configuration/checksum", &resp)
+	err := c.Get(c.endpoints().ZoneChecksum(), &resp)
 	if err != nil {
 		return "", err
 	}
@@ -120,13 +119,13 @@ func (c *Client) UpdateDefinedConfig(name string, memberZones []string) error {
 		Name:        name,
 		MemberZones: memberZones,
 	}
-	return c.Patch("/brocade-zone/defined-configuration/cfg", payload)
+	return c.Patch(c.endpoints().DefinedConfigs(), payload)
 }
 
 // PatchEffectiveConfigAPI 用于 Save/Activate Zone 配置操作的请求体
 type PatchEffectiveConfigAPI struct {
-	XMLName  xml.Name `xml:"effective-configuration"`
-	Checksum string   `xml:"checksum"` // 当前配置校验和，用于防止并发修改冲突
+	XMLName  xml.Name `xml:"checksum"`
+	Checksum string   `xml:",chardata"` // 当前配置校验和，用于防止并发修改冲突
 }
 
 // SaveZoneConfig 保存当前 Zone 定义配置到持久存储。
@@ -136,7 +135,7 @@ func (c *Client) SaveZoneConfig(checksum string) error {
 	payload := PatchEffectiveConfigAPI{
 		Checksum: checksum,
 	}
-	return c.Patch("/brocade-zone/effective-configuration/cfg-action-v2/save", payload)
+	return c.Patch(c.endpoints().ZoneSaveConfig(), payload)
 }
 
 // ActivateZoneConfig 激活指定的 Zone 配置（cfg），使其成为当前生效配置。
@@ -146,6 +145,5 @@ func (c *Client) ActivateZoneConfig(name string, checksum string) error {
 	payload := PatchEffectiveConfigAPI{
 		Checksum: checksum,
 	}
-	endpoint := "/brocade-zone/effective-configuration/cfg-name/" + url.PathEscape(name)
-	return c.Patch(endpoint, payload)
+	return c.Patch(c.endpoints().ZoneActivateConfig(name), payload)
 }

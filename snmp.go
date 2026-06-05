@@ -101,7 +101,7 @@ type SNMPv3TrapInfo struct {
 // GetSNMPSystem 获取 SNMP 系统级配置
 func (c *Client) GetSNMPSystem() (*SNMPSystemInfo, error) {
 	var resp SNMPSystemResponse
-	err := c.Get("/brocade-snmp/system", &resp)
+	err := c.Get(c.endpoints().SNMPSystem(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (c *Client) GetSNMPSystem() (*SNMPSystemInfo, error) {
 // GetSNMPv1Accounts 获取所有 SNMPv1 社区字符串账户
 func (c *Client) GetSNMPv1Accounts() ([]SNMPv1AccountInfo, error) {
 	var resp SNMPv1AccountResponse
-	err := c.Get("/brocade-snmp/v1-account", &resp)
+	err := c.Get(c.endpoints().SNMPv1Accounts(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (c *Client) GetSNMPv1Accounts() ([]SNMPv1AccountInfo, error) {
 // GetSNMPv1Traps 获取所有 SNMPv1 Trap 接收者配置
 func (c *Client) GetSNMPv1Traps() ([]SNMPv1TrapInfo, error) {
 	var resp SNMPv1TrapResponse
-	err := c.Get("/brocade-snmp/v1-trap", &resp)
+	err := c.Get(c.endpoints().SNMPv1Traps(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (c *Client) GetSNMPv1Traps() ([]SNMPv1TrapInfo, error) {
 // GetSNMPv3Accounts 获取所有 SNMPv3 用户账户
 func (c *Client) GetSNMPv3Accounts() ([]SNMPv3AccountInfo, error) {
 	var resp SNMPv3AccountResponse
-	err := c.Get("/brocade-snmp/v3-account", &resp)
+	err := c.Get(c.endpoints().SNMPv3Accounts(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (c *Client) GetSNMPv3Accounts() ([]SNMPv3AccountInfo, error) {
 // GetSNMPv3Traps 获取所有 SNMPv3 Trap 接收者配置
 func (c *Client) GetSNMPv3Traps() ([]SNMPv3TrapInfo, error) {
 	var resp SNMPv3TrapResponse
-	err := c.Get("/brocade-snmp/v3-trap", &resp)
+	err := c.Get(c.endpoints().SNMPv3Traps(), &resp)
 	if err != nil {
 		return nil, err
 	}

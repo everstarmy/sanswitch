@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"fmt"
+)
 
 // ==================== Blade ====================
 
@@ -237,7 +240,7 @@ type SensorInfo struct {
 // 对应 API: GET /brocade-fru/blade
 func (c *Client) GetBlades() ([]BladeInfo, error) {
 	var resp BladeResponse
-	err := c.Get("/brocade-fru/blade", &resp)
+	err := c.Get(c.endpoints().Blades(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +251,7 @@ func (c *Client) GetBlades() ([]BladeInfo, error) {
 // 对应 API: GET /brocade-fru/fan
 func (c *Client) GetFans() ([]FanInfo, error) {
 	var resp FanResponse
-	err := c.Get("/brocade-fru/fan", &resp)
+	err := c.Get(c.endpoints().Fans(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +262,7 @@ func (c *Client) GetFans() ([]FanInfo, error) {
 // 对应 API: GET /brocade-fru/power-supply
 func (c *Client) GetPowerSupplies() ([]PowerSupplyInfo, error) {
 	var resp PowerSupplyResponse
-	err := c.Get("/brocade-fru/power-supply", &resp)
+	err := c.Get(c.endpoints().PowerSupplies(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -269,8 +272,11 @@ func (c *Client) GetPowerSupplies() ([]PowerSupplyInfo, error) {
 // GetHistoryLogs 获取 FRU 组件的历史日志记录。
 // 对应 API: GET /brocade-fru/history-log
 func (c *Client) GetHistoryLogs() ([]HistoryLogInfo, error) {
+	if err := c.ensureFRUHistoryLogSensorSupported("FRU history-log"); err != nil {
+		return nil, err
+	}
 	var resp HistoryLogResponse
-	err := c.Get("/brocade-fru/history-log", &resp)
+	err := c.Get(c.endpoints().HistoryLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -280,10 +286,20 @@ func (c *Client) GetHistoryLogs() ([]HistoryLogInfo, error) {
 // GetSensors 获取交换机上所有传感器的详细信息。
 // 对应 API: GET /brocade-fru/sensor
 func (c *Client) GetSensors() ([]SensorInfo, error) {
+	if err := c.ensureFRUHistoryLogSensorSupported("FRU sensor"); err != nil {
+		return nil, err
+	}
 	var resp SensorResponse
-	err := c.Get("/brocade-fru/sensor", &resp)
+	err := c.Get(c.endpoints().Sensors(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Sensors, nil
+}
+
+func (c *Client) ensureFRUHistoryLogSensorSupported(operation string) error {
+	if c.endpoints().allowFRUHistoryLogSensor() {
+		return nil
+	}
+	return fmt.Errorf("%w: FOS %s does not support %s endpoint", ErrUnsupportedOperation, c.endpoints().version, operation)
 }

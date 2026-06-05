@@ -2,7 +2,6 @@ package san
 
 import (
 	"encoding/xml"
-	"net/url"
 )
 
 // DefinedAliasAPI 表示 Zone 定义配置中的 Alias（用于 XML 请求/响应序列化）
@@ -22,7 +21,7 @@ type DefinedAliasResponse struct {
 // 对应 API: GET /brocade-zone/defined-configuration/alias
 func (c *Client) GetDefinedAliases() ([]AliasInfo, error) {
 	var resp DefinedAliasResponse
-	err := c.Get("/brocade-zone/defined-configuration/alias", &resp)
+	err := c.Get(c.endpoints().DefinedAliases(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +44,7 @@ func (c *Client) CreateAlias(name string, members []string) error {
 		Name:             name,
 		MemberEntryNames: members,
 	}
-	return c.Post("/brocade-zone/defined-configuration/alias", payload)
+	return c.Post(c.endpoints().DefinedAliases(), payload)
 }
 
 // UpdateAlias 更新 Zone 定义配置中已有 Alias 的成员列表。
@@ -55,7 +54,7 @@ func (c *Client) UpdateAlias(name string, members []string) error {
 		Name:             name,
 		MemberEntryNames: members,
 	}
-	return c.Patch("/brocade-zone/defined-configuration/alias", payload)
+	return c.Patch(c.endpoints().DefinedAliases(), payload)
 }
 
 // RenameAlias 重命名 Zone 定义配置中的一个 Alias。
@@ -64,13 +63,11 @@ func (c *Client) RenameAlias(oldName, newName string) error {
 	payload := DefinedAliasAPI{
 		Name: newName,
 	}
-	endpoint := "/brocade-zone/defined-configuration/alias/alias-name/" + url.PathEscape(oldName)
-	return c.Patch(endpoint, payload)
+	return c.Patch(c.endpoints().DefinedAlias(oldName), payload)
 }
 
 // DeleteAlias 从 Zone 定义配置中删除一个 Alias。
 // 对应 API: DELETE /brocade-zone/defined-configuration/alias/alias-name/{name}
 func (c *Client) DeleteAlias(name string) error {
-	endpoint := "/brocade-zone/defined-configuration/alias/alias-name/" + url.PathEscape(name)
-	return c.Delete(endpoint)
+	return c.Delete(c.endpoints().DefinedAlias(name))
 }

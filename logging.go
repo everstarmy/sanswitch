@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"fmt"
+)
 
 // ==================== Error Log (RAS Log) ====================
 
@@ -30,8 +33,12 @@ type ErrorLogInfo struct {
 // GetErrorLogs 获取交换机上的所有 RAS 错误日志记录。
 // 对应 API: GET /brocade-logging/error-log
 func (c *Client) GetErrorLogs() ([]ErrorLogInfo, error) {
+	if err := c.ensureLoggingSupported("error-log"); err != nil {
+		return nil, err
+	}
+
 	var resp ErrorLogResponse
-	err := c.Get("/brocade-logging/error-log", &resp)
+	err := c.Get(c.endpoints().ErrorLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -71,10 +78,21 @@ type AuditLogInfo struct {
 // GetAuditLogs 获取交换机上的所有审计日志记录。
 // 对应 API: GET /brocade-logging/audit-log
 func (c *Client) GetAuditLogs() ([]AuditLogInfo, error) {
+	if err := c.ensureLoggingSupported("audit-log"); err != nil {
+		return nil, err
+	}
+
 	var resp AuditLogResponse
-	err := c.Get("/brocade-logging/audit-log", &resp)
+	err := c.Get(c.endpoints().AuditLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.AuditLogs, nil
+}
+
+func (c *Client) ensureLoggingSupported(operation string) error {
+	if c.endpoints().allowLogging() {
+		return nil
+	}
+	return fmt.Errorf("%w: FOS %s does not support %s endpoint", ErrUnsupportedOperation, c.endpoints().version, operation)
 }

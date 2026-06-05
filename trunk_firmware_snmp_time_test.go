@@ -1,6 +1,7 @@
 package san
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 )
@@ -39,7 +40,8 @@ func TestGetTrunks(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := newTestClient(t, ts)
+	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.1.0"))
+	c.baseURL = ts.URL + "/rest/running"
 
 	trunks, err := c.GetTrunks()
 	if err != nil {
@@ -228,6 +230,26 @@ func TestGetFirmwareHistory(t *testing.T) {
 	}
 	if history[1].FirmwareVersion != "Fabos Version 9.0.0" {
 		t.Errorf("unexpected firmware-version: %s", history[1].FirmwareVersion)
+	}
+}
+
+func TestGetFirmwareHistoryRequiresFOS91(t *testing.T) {
+	var called bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/brocade-firmware/firmware-history", func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.0.2"))
+	c.baseURL = ts.URL + "/rest/running"
+
+	if _, err := c.GetFirmwareHistory(); !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("expected ErrUnsupportedOperation, got %v", err)
+	}
+	if called {
+		t.Fatal("expected GetFirmwareHistory to return before HTTP call")
 	}
 }
 

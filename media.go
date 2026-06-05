@@ -124,7 +124,7 @@ type MediaRDPInfo struct {
 // 对应 API: GET /brocade-media/media-rdp
 func (c *Client) GetMediaRDPs() ([]MediaRDPInfo, error) {
 	var resp MediaRDPResponse
-	err := c.Get("/brocade-media/media-rdp", &resp)
+	err := c.Get(c.endpoints().MediaRDPs(), &resp)
 	if err != nil {
 		return nil, err
 	}

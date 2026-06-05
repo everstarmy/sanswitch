@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"fmt"
+)
 
 // ==================== Firmware History ====================
 
@@ -25,10 +28,20 @@ type FirmwareHistoryInfo struct {
 
 // GetFirmwareHistory 获取固件版本安装历史
 func (c *Client) GetFirmwareHistory() ([]FirmwareHistoryInfo, error) {
+	if err := c.ensureFirmwareHistorySupported(); err != nil {
+		return nil, err
+	}
 	var resp FirmwareHistoryResponse
-	err := c.Get("/brocade-firmware/firmware-history", &resp)
+	err := c.Get(c.endpoints().FirmwareHistory(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.FirmwareHistory, nil
+}
+
+func (c *Client) ensureFirmwareHistorySupported() error {
+	if c.endpoints().allowFirmwareHistory() {
+		return nil
+	}
+	return fmt.Errorf("%w: FOS %s does not support firmware-history endpoint", ErrUnsupportedOperation, c.endpoints().version)
 }

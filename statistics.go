@@ -138,7 +138,7 @@ type FibreChannelStatisticsInfo struct {
 // 对应 API: GET /brocade-interface/fibrechannel-statistics
 func (c *Client) GetFibreChannelStatistics() ([]FibreChannelStatisticsInfo, error) {
 	var resp FibreChannelStatisticsResponse
-	err := c.Get("/brocade-interface/fibrechannel-statistics", &resp)
+	err := c.Get(c.endpoints().FibreChannelStatistics(), &resp)
 	if err != nil {
 		return nil, err
 	}

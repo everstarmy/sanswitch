@@ -24,6 +24,7 @@ type SwitchAPI interface {
 
 	// Zone 管理
 	GetDefinedZones() ([]ZoneInfo, error)
+	GetDefinedZone(name string) (*ZoneInfo, error)
 	GetEffectiveZones() ([]ZoneInfo, error)
 	GetDefinedAliases() ([]AliasInfo, error)
 	GetDefinedConfigs() ([]ConfigInfo, error)
@@ -192,6 +193,11 @@ func (s *SANSwitch) GetSensors() ([]SensorInfo, error) {
 // GetDefinedZones 获取 Zone 定义配置中的所有 Zone 列表
 func (s *SANSwitch) GetDefinedZones() ([]ZoneInfo, error) {
 	return s.client.GetDefinedZones()
+}
+
+// GetDefinedZone 获取 Zone 定义配置中的单个 Zone
+func (s *SANSwitch) GetDefinedZone(name string) (*ZoneInfo, error) {
+	return s.client.GetDefinedZone(name)
 }
 
 // GetEffectiveZones 获取已生效配置中的所有 Zone 列表
