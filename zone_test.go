@@ -677,6 +677,7 @@ func TestDeleteZoneRejectsMissingZone(t *testing.T) {
 
 func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
 	var calls []string
+	var patchedConfigs []DefinedConfigAPI
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.EscapedPath())
@@ -691,6 +692,41 @@ func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.EscapedPath() == "/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete":
 			w.Header().Set("Content-Type", "application/yang-data+xml")
 			w.Write([]byte(`<?xml version="1.0"?><Response><zone><zone-name>zone/delete</zone-name><zone-type-string>zone</zone-type-string></zone></Response>`))
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/running/brocade-zone/defined-configuration/cfg":
+			w.Header().Set("Content-Type", "application/yang-data+xml")
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <cfg>
+    <cfg-name>cfg1</cfg-name>
+    <member-zone>
+      <zone-name>zone_keep</zone-name>
+      <zone-name>zone/delete</zone-name>
+    </member-zone>
+  </cfg>
+  <cfg>
+    <cfg-name>cfg2</cfg-name>
+    <member-zone>
+      <zone-name>zone/delete</zone-name>
+    </member-zone>
+  </cfg>
+  <cfg>
+    <cfg-name>cfg3</cfg-name>
+    <member-zone>
+      <zone-name>zone_other</zone-name>
+    </member-zone>
+  </cfg>
+</Response>`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/rest/running/brocade-zone/defined-configuration/cfg":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read cfg body: %v", err)
+			}
+			var payload DefinedConfigAPI
+			if err := xml.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("unmarshal cfg body: %v", err)
+			}
+			patchedConfigs = append(patchedConfigs, payload)
+			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodDelete && r.URL.EscapedPath() == "/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete":
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodPatch && r.URL.Path == "/rest/running/brocade-zone/effective-configuration/cfg-action-v2/save":
@@ -714,6 +750,9 @@ func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
 	want := []string{
 		"GET /rest/running/brocade-zone/effective-configuration/checksum",
 		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",
+		"GET /rest/running/brocade-zone/defined-configuration/cfg",
+		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
+		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
 		"DELETE /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",
 		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-action-v2/save",
 		"GET /rest/running/brocade-zone/effective-configuration/checksum",
@@ -721,6 +760,15 @@ func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
 	}
 	if got := strings.Join(calls, "\n"); got != strings.Join(want, "\n") {
 		t.Fatalf("unexpected call order:\n%s", got)
+	}
+	if len(patchedConfigs) != 2 {
+		t.Fatalf("expected 2 cfg patches, got %d", len(patchedConfigs))
+	}
+	if patchedConfigs[0].Name != "cfg1" || strings.Join(patchedConfigs[0].MemberZones, ",") != "zone_keep" {
+		t.Fatalf("unexpected cfg1 patch: %+v", patchedConfigs[0])
+	}
+	if patchedConfigs[1].Name != "cfg2" || len(patchedConfigs[1].MemberZones) != 0 {
+		t.Fatalf("unexpected cfg2 patch: %+v", patchedConfigs[1])
 	}
 }
 

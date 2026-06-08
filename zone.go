@@ -220,8 +220,9 @@ func (c *Client) DeleteZone(name string) error {
 
 // DeleteZoneAndActivate 执行完整的 Zone 删除并激活流程：
 // 1. 获取当前 checksum
-// 2. 删除 Zone
-// 3. 保存配置并激活
+// 2. 从所有包含该 Zone 的 cfg 中移除 Zone
+// 3. 删除 Zone
+// 4. 保存配置并激活
 func (c *Client) DeleteZoneAndActivate(cfgName, zoneName string) error {
 	if strings.TrimSpace(cfgName) == "" {
 		return errors.New("cfg name required")
@@ -234,7 +235,23 @@ func (c *Client) DeleteZoneAndActivate(cfgName, zoneName string) error {
 	if err != nil {
 		return err
 	}
-	if err := c.DeleteZone(zoneName); err != nil {
+	if _, err := c.GetDefinedZone(zoneName); err != nil {
+		return err
+	}
+	configs, err := c.GetDefinedConfigs()
+	if err != nil {
+		return err
+	}
+	for _, cfg := range configs {
+		memberZones, removed := removeString(cfg.MemberZones, zoneName)
+		if !removed {
+			continue
+		}
+		if err := c.UpdateDefinedConfig(cfg.Name, memberZones); err != nil {
+			return err
+		}
+	}
+	if err := c.Delete(c.endpoints().DefinedZone(zoneName)); err != nil {
 		return err
 	}
 	return c.saveAndActivateZoneConfig(cfgName, checksum)
@@ -331,4 +348,17 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func removeString(values []string, target string) ([]string, bool) {
+	filtered := make([]string, 0, len(values))
+	removed := false
+	for _, value := range values {
+		if value == target {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, value)
+	}
+	return filtered, removed
 }
