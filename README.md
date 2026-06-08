@@ -171,7 +171,7 @@ sw.SetVFID(0)   // 设回 0 可取消 VFID
 | `CreateZoneAndActivate(cfg, zone, members, principalMembers)` | 组合流程 | 创建 Zone、加入 cfg、保存并激活 |
 | `ReplaceZoneAndActivate(cfg, zone, members, principalMembers)` | 组合流程 | 全量替换 Zone 成员、保存并激活 |
 | `DeleteZoneAndActivate(cfg, zone)` | 组合流程 | 删除 Zone、保存并激活 |
-| `AbortZoneTransaction()` | `PATCH /brocade-zone/effective-configuration/cfg-action-v2/transaction-abort` | 中止 Zone 事务 |
+| `AbortZoneTransaction()` | 9.2+: `PATCH /brocade-zone/effective-configuration/cfg-action-v2/transaction-abort`; <=9.1: `PATCH /brocade-zone/effective-configuration/cfg-action/4` | 中止 Zone 事务 |
 | `GetZoneTransactionStatus()` | `/brocade-zone/effective-configuration/transaction-token` | 查询 Zone 事务状态 |
 
 低层 Zone 写方法只修改 defined configuration。若需要让变更在 Fabric 中生效，推荐使用组合流程：

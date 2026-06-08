@@ -15,9 +15,10 @@ type ZoneTransactionStatusResponse struct {
 }
 
 // AbortZoneTransaction 中止当前挂起的 Zone 事务（释放事务锁）
-// 对应 API: PATCH /brocade-zone/effective-configuration/cfg-action-v2/transaction-abort
+// FOS 9.1 及以下使用 PATCH /brocade-zone/effective-configuration/cfg-action/4，
+// FOS 9.2+ 使用 PATCH /brocade-zone/effective-configuration/cfg-action-v2/transaction-abort。
 func (c *Client) AbortZoneTransaction() error {
-	return c.Patch(c.endpoints().ZoneAbortTransaction(), nil)
+	return c.patchWithoutVersionGate(c.endpoints().ZoneAbortTransaction(), nil)
 }
 
 // GetZoneTransactionStatus 查询当前 Zone 事务状态

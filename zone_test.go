@@ -850,6 +850,30 @@ func TestAbortZoneTransaction(t *testing.T) {
 	}
 }
 
+func TestAbortZoneTransactionUsesLegacyEndpointThroughFOS91(t *testing.T) {
+	var called bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-action/4", func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.Method != http.MethodPatch {
+			t.Errorf("expected PATCH, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.1.1"))
+	c.baseURL = ts.URL + "/rest/running"
+
+	err := c.AbortZoneTransaction()
+	if err != nil {
+		t.Fatalf("AbortZoneTransaction() error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected legacy abort endpoint to be called")
+	}
+}
+
 func TestGetZoneTransactionStatus(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/transaction-token", func(w http.ResponseWriter, r *http.Request) {

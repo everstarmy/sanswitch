@@ -109,7 +109,10 @@ func (endpoints) ZoneActivateConfig(name string) string {
 	return "/brocade-zone/effective-configuration/cfg-name/" + url.PathEscape(name)
 }
 
-func (endpoints) ZoneAbortTransaction() string {
+func (e endpoints) ZoneAbortTransaction() string {
+	if e.version.known && (e.version.major < 9 || e.version.major == 9 && e.version.minor <= 1) {
+		return "/brocade-zone/effective-configuration/cfg-action/4"
+	}
 	return "/brocade-zone/effective-configuration/cfg-action-v2/transaction-abort"
 }
 

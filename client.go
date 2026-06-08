@@ -376,6 +376,10 @@ func (c *Client) Patch(endpoint string, payload interface{}) error {
 	if err := c.ensureWriteSupported(); err != nil {
 		return err
 	}
+	return c.patchWithoutVersionGate(endpoint, payload)
+}
+
+func (c *Client) patchWithoutVersionGate(endpoint string, payload interface{}) error {
 	url := c.buildURL(endpoint)
 
 	var reqBody []byte
