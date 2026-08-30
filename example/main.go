@@ -3,24 +3,34 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	san "github.com/everstarmy/sanswitch"
 )
 
 func main() {
-	host := "192.168.1.100"
-	username := "admin"
-	password := "password"
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
 
-	// 创建并自动登录（默认 HTTPS + 跳过证书验证）
+func run() error {
+	host := os.Getenv("SAN_HOST")
+	username := os.Getenv("SAN_USERNAME")
+	password := os.Getenv("SAN_PASSWORD")
+	if host == "" || username == "" || password == "" {
+		return fmt.Errorf("SAN_HOST, SAN_USERNAME and SAN_PASSWORD must be set")
+	}
+
+	// 创建并自动登录（默认 HTTPS 并校验证书）。
 	switchClient, err := san.NewSANSwitch(host, username, password,
 		san.WithTimeout(60*time.Second),
 	)
 	if err != nil {
-		log.Fatalf("登录失败: %v", err)
+		return fmt.Errorf("登录失败: %w", err)
 	}
-	switchClient.SetVerbose(true)
+	defer switchClient.Close()
 
 	fmt.Println("=== 登录成功 ===")
 
@@ -36,7 +46,7 @@ func main() {
 	fmt.Println("\n=== 获取Fabric中的所有交换机 ===")
 	switches, err := switchClient.GetFabricSwitches()
 	if err != nil {
-		log.Fatalf("获取交换机列表失败: %v", err)
+		return fmt.Errorf("获取交换机列表失败: %w", err)
 	}
 	for _, sw := range switches {
 		fmt.Printf("交换机: %s (WWNN: %s, Domain: %d, IP: %s)\n",
@@ -46,7 +56,7 @@ func main() {
 	fmt.Println("\n=== 获取交换机基本信息 ===")
 	switchInfo, err := switchClient.GetSwitchInfo()
 	if err != nil {
-		log.Fatalf("获取交换机信息失败: %v", err)
+		return fmt.Errorf("获取交换机信息失败: %w", err)
 	}
 	fmt.Printf("交换机名称: %s\n", switchInfo.Name)
 	fmt.Printf("WWN: %s\n", switchInfo.WWN)
@@ -61,7 +71,7 @@ func main() {
 	fmt.Println("\n=== 获取端口信息 ===")
 	ports, err := switchClient.GetPorts()
 	if err != nil {
-		log.Fatalf("获取端口信息失败: %v", err)
+		return fmt.Errorf("获取端口信息失败: %w", err)
 	}
 	for _, port := range ports {
 		fmt.Printf("端口 %s: 状态=%s, 速率=%s, WWN=%s, FCID=%s, 端口类型=%s\n",
@@ -71,7 +81,7 @@ func main() {
 	fmt.Println("\n=== 获取硬件信息 ===")
 	hardware, err := switchClient.GetHardwareInfo()
 	if err != nil {
-		log.Fatalf("获取硬件信息失败: %v", err)
+		return fmt.Errorf("获取硬件信息失败: %w", err)
 	}
 	fmt.Printf("机箱类型: %s\n", hardware.ChassisType)
 	fmt.Printf("机箱序列号: %s\n", hardware.ChassisSerial)
@@ -82,7 +92,7 @@ func main() {
 	fmt.Println("\n=== 获取Switch Status Policy Report (MAPS) ===")
 	switchStatus, err := switchClient.GetSwitchStatusPolicyReport()
 	if err != nil {
-		log.Fatalf("获取Switch Status Policy Report失败: %v", err)
+		return fmt.Errorf("获取Switch Status Policy Report失败: %w", err)
 	}
 	fmt.Printf("交换机健康状态: %s\n", switchStatus.SwitchStatus)
 	fmt.Printf("电源健康状态: %s\n", switchStatus.PowerSupplyHealth)
@@ -96,7 +106,7 @@ func main() {
 	fmt.Println("\n=== 获取System Resources (MAPS) ===")
 	sysResources, err := switchClient.GetSystemResources()
 	if err != nil {
-		log.Fatalf("获取System Resources失败: %v", err)
+		return fmt.Errorf("获取System Resources失败: %w", err)
 	}
 	fmt.Printf("CPU使用率: %d%%\n", sysResources.CPUUsage)
 	fmt.Printf("内存使用: %d\n", sysResources.MemoryUsage)
@@ -107,7 +117,7 @@ func main() {
 	fmt.Println("\n=== 获取SFP信息 ===")
 	sfps, err := switchClient.GetMediaRDPs()
 	if err != nil {
-		log.Fatalf("获取SFP信息失败: %v", err)
+		return fmt.Errorf("获取SFP信息失败: %w", err)
 	}
 	fmt.Printf("SFP数量: %d\n", len(sfps))
 	for _, sfp := range sfps {
@@ -119,7 +129,7 @@ func main() {
 	fmt.Println("\n=== 获取Blade信息 ===")
 	blades, err := switchClient.GetBlades()
 	if err != nil {
-		log.Fatalf("获取Blade信息失败: %v", err)
+		return fmt.Errorf("获取Blade信息失败: %w", err)
 	}
 	fmt.Printf("Blade数量: %d\n", len(blades))
 	for _, blade := range blades {
@@ -130,7 +140,7 @@ func main() {
 	fmt.Println("\n=== 获取风扇信息 ===")
 	fans, err := switchClient.GetFans()
 	if err != nil {
-		log.Fatalf("获取风扇信息失败: %v", err)
+		return fmt.Errorf("获取风扇信息失败: %w", err)
 	}
 	fmt.Printf("风扇数量: %d\n", len(fans))
 	for _, fan := range fans {
@@ -141,7 +151,7 @@ func main() {
 	fmt.Println("\n=== 获取电源信息 ===")
 	psus, err := switchClient.GetPowerSupplies()
 	if err != nil {
-		log.Fatalf("获取电源信息失败: %v", err)
+		return fmt.Errorf("获取电源信息失败: %w", err)
 	}
 	fmt.Printf("电源数量: %d\n", len(psus))
 	for _, psu := range psus {
@@ -152,7 +162,7 @@ func main() {
 	fmt.Println("\n=== 获取传感器信息 ===")
 	sensors, err := switchClient.GetSensors()
 	if err != nil {
-		log.Fatalf("获取传感器信息失败: %v", err)
+		return fmt.Errorf("获取传感器信息失败: %w", err)
 	}
 	fmt.Printf("传感器数量: %d\n", len(sensors))
 	for _, sensor := range sensors {
@@ -163,7 +173,7 @@ func main() {
 	fmt.Println("\n=== 获取FRU历史日志 ===")
 	logs, err := switchClient.GetHistoryLogs()
 	if err != nil {
-		log.Fatalf("获取FRU历史日志失败: %v", err)
+		return fmt.Errorf("获取FRU历史日志失败: %w", err)
 	}
 	fmt.Printf("历史日志数量: %d\n", len(logs))
 	for _, log := range logs {
@@ -174,7 +184,7 @@ func main() {
 	fmt.Println("\n=== 获取Defined Zones (定义的Zone) ===")
 	definedZones, err := switchClient.GetDefinedZones()
 	if err != nil {
-		log.Fatalf("获取Defined Zones失败: %v", err)
+		return fmt.Errorf("获取Defined Zones失败: %w", err)
 	}
 	fmt.Printf("定义的Zone数量: %d\n", len(definedZones))
 	for _, zone := range definedZones {
@@ -184,7 +194,7 @@ func main() {
 	fmt.Println("\n=== 获取Effective Zones (生效的Zone) ===")
 	effectiveZones, err := switchClient.GetEffectiveZones()
 	if err != nil {
-		log.Fatalf("获取Effective Zones失败: %v", err)
+		return fmt.Errorf("获取Effective Zones失败: %w", err)
 	}
 	fmt.Printf("生效的Zone数量: %d\n", len(effectiveZones))
 	for _, zone := range effectiveZones {
@@ -194,7 +204,7 @@ func main() {
 	fmt.Println("\n=== 获取Defined Aliases (定义的Alias) ===")
 	aliases, err := switchClient.GetDefinedAliases()
 	if err != nil {
-		log.Fatalf("获取Alias信息失败: %v", err)
+		return fmt.Errorf("获取Alias信息失败: %w", err)
 	}
 	for _, alias := range aliases {
 		fmt.Printf("Alias %s: 成员=%v\n", alias.Name, alias.Members)
@@ -203,7 +213,7 @@ func main() {
 	fmt.Println("\n=== 获取Defined Configs (定义的配置) ===")
 	definedConfigs, err := switchClient.GetDefinedConfigs()
 	if err != nil {
-		log.Fatalf("获取Defined Configs失败: %v", err)
+		return fmt.Errorf("获取Defined Configs失败: %w", err)
 	}
 	for _, cfg := range definedConfigs {
 		fmt.Printf("配置 %s: 包含Zone=%v\n", cfg.Name, cfg.MemberZones)
@@ -212,7 +222,7 @@ func main() {
 	fmt.Println("\n=== 获取Effective Config (生效的配置) ===")
 	effectiveConfig, err := switchClient.GetEffectiveConfig()
 	if err != nil {
-		log.Fatalf("获取Effective Config失败: %v", err)
+		return fmt.Errorf("获取Effective Config失败: %w", err)
 	}
 	fmt.Printf("活动配置名称: %s\n", effectiveConfig.Name)
 	fmt.Printf("校验和: %s\n", effectiveConfig.Checksum)
@@ -221,7 +231,7 @@ func main() {
 	fmt.Println("\n=== 获取Zone数据库信息 ===")
 	dbInfo, err := switchClient.GetZoneDatabaseInfo()
 	if err != nil {
-		log.Fatalf("获取Zone数据库信息失败: %v", err)
+		return fmt.Errorf("获取Zone数据库信息失败: %w", err)
 	}
 	fmt.Printf("数据库最大容量: %d\n", dbInfo.DBMax)
 	fmt.Printf("数据库可用空间: %d\n", dbInfo.DBAvail)
@@ -231,7 +241,7 @@ func main() {
 	fmt.Println("\n=== 获取逻辑交换机信息 ===")
 	logicalSwitches, err := switchClient.GetLogicalSwitches()
 	if err != nil {
-		log.Fatalf("获取逻辑交换机信息失败: %v", err)
+		return fmt.Errorf("获取逻辑交换机信息失败: %w", err)
 	}
 	for _, ls := range logicalSwitches {
 		fmt.Printf("逻辑交换机: FabricID=%d, WWN=%s, BaseSwitch=%v, DefaultSwitch=%v\n",
@@ -246,10 +256,12 @@ func main() {
 	fmt.Println("\n=== 获取VF 128的逻辑交换机信息 ===")
 	logicalSwitches, err = switchClient.GetLogicalSwitches()
 	if err != nil {
-		log.Fatalf("获取VF 128逻辑交换机信息失败: %v", err)
+		return fmt.Errorf("获取VF 128逻辑交换机信息失败: %w", err)
 	}
 	for _, ls := range logicalSwitches {
 		fmt.Printf("VF %d 逻辑交换机: FabricID=%d, WWN=%s\n",
 			128, ls.FabricID, ls.SwitchWWN)
 	}
+
+	return nil
 }

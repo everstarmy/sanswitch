@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // SSPStateType 表示 MAPS（Monitoring and Alerting Policy Suite）中各组件的健康状态等级。
 // 可能的值: ok, warning, critical, unknown
@@ -105,8 +108,13 @@ type SystemResourcesInfo struct {
 // 包括交换机整体健康度、电源、风扇、温度传感器、端口、SFP 等状态。
 // 对应 API: GET /brocade-maps/switch-status-policy-report
 func (c *Client) GetSwitchStatusPolicyReport() (*SwitchStatusPolicyReportInfo, error) {
+	return c.GetSwitchStatusPolicyReportWithContext(context.Background())
+}
+
+// GetSwitchStatusPolicyReportWithContext 获取交换机健康状态策略报告并允许取消请求。
+func (c *Client) GetSwitchStatusPolicyReportWithContext(ctx context.Context) (*SwitchStatusPolicyReportInfo, error) {
 	var resp SwitchStatusPolicyReportResponse
-	err := c.Get(c.endpoints().SwitchStatusPolicyReport(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SwitchStatusPolicyReport(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +144,13 @@ func (c *Client) GetSwitchStatusPolicyReport() (*SwitchStatusPolicyReportInfo, e
 // GetSystemResources 获取交换机系统资源使用情况，包括 CPU、内存、Flash 使用率等。
 // 对应 API: GET /brocade-maps/system-resources
 func (c *Client) GetSystemResources() (*SystemResourcesInfo, error) {
+	return c.GetSystemResourcesWithContext(context.Background())
+}
+
+// GetSystemResourcesWithContext 获取系统资源使用情况并允许取消请求。
+func (c *Client) GetSystemResourcesWithContext(ctx context.Context) (*SystemResourcesInfo, error) {
 	var resp SystemResourcesResponse
-	err := c.Get(c.endpoints().SystemResources(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SystemResources(), &resp)
 	if err != nil {
 		return nil, err
 	}

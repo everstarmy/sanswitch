@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // FibreChannelNameServerResponse 是 GET /brocade-name-server/fibrechannel-name-server 的 XML 响应包装
 type FibreChannelNameServerResponse struct {
@@ -46,8 +49,13 @@ type FibreChannelNameServerInfo struct {
 // GetFibreChannelNameServers 获取 Fabric Name Server 中注册的所有设备条目。
 // 对应 API: GET /brocade-name-server/fibrechannel-name-server
 func (c *Client) GetFibreChannelNameServers() ([]FibreChannelNameServerInfo, error) {
+	return c.GetFibreChannelNameServersWithContext(context.Background())
+}
+
+// GetFibreChannelNameServersWithContext 获取 Name Server 条目并允许取消请求。
+func (c *Client) GetFibreChannelNameServersWithContext(ctx context.Context) ([]FibreChannelNameServerInfo, error) {
 	var resp FibreChannelNameServerResponse
-	err := c.Get(c.endpoints().NameServer(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().NameServer(), &resp)
 	if err != nil {
 		return nil, err
 	}

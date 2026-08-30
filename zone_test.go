@@ -2,6 +2,7 @@ package san
 
 import (
 	"encoding/xml"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -299,11 +300,13 @@ func TestCreateZoneWithPrincipalMembersCreatesPeerZone(t *testing.T) {
 
 func TestCreateZoneAndActivateWorkflow(t *testing.T) {
 	var calls []string
+	checksumCalls := 0
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/checksum", func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
+		checksumCalls++
 		w.Header().Set("Content-Type", "application/yang-data+xml")
-		if len(calls) == 1 {
+		if checksumCalls == 1 {
 			w.Write([]byte(checksumXML("old-checksum")))
 			return
 		}
@@ -392,10 +395,10 @@ func TestCreateZoneAndActivateWorkflow(t *testing.T) {
 	}
 
 	want := []string{
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_new",
-		"POST /rest/running/brocade-zone/defined-configuration/zone",
 		"GET /rest/running/brocade-zone/defined-configuration/cfg",
+		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_new",
+		"GET /rest/running/brocade-zone/effective-configuration/checksum",
+		"POST /rest/running/brocade-zone/defined-configuration/zone",
 		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
 		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-action-v2/save",
 		"GET /rest/running/brocade-zone/effective-configuration/checksum",
@@ -403,6 +406,58 @@ func TestCreateZoneAndActivateWorkflow(t *testing.T) {
 	}
 	if got := strings.Join(calls, "\n"); got != strings.Join(want, "\n") {
 		t.Fatalf("unexpected call order:\n%s", got)
+	}
+}
+
+func TestCreateZoneAndActivateAbortsAfterMutationFailure(t *testing.T) {
+	abortCalled := false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/cfg", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(definedConfigXML("cfg1")))
+	})
+	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_new", func(w http.ResponseWriter, r *http.Request) {
+		writeNotFound(w)
+	})
+	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/checksum", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(checksumXML("old-checksum")))
+	})
+	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-action-v2/transaction-abort", func(w http.ResponseWriter, r *http.Request) {
+		abortCalled = true
+		if r.Method != http.MethodPatch {
+			t.Errorf("expected PATCH, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := newTestClient(t, ts)
+
+	err := c.CreateZoneAndActivate("cfg1", "zone_new", []string{"member"}, nil)
+	if err == nil {
+		t.Fatal("expected workflow failure")
+	}
+	var partialErr *PartialMutationError
+	if !errors.As(err, &partialErr) {
+		t.Fatalf("expected PartialMutationError, got %T: %v", err, err)
+	}
+	if !abortCalled {
+		t.Fatal("expected failed workflow to abort the pending transaction")
 	}
 }
 
@@ -565,11 +620,13 @@ func TestRenameZone(t *testing.T) {
 
 func TestReplaceZoneAndActivateWorkflow(t *testing.T) {
 	var calls []string
+	checksumCalls := 0
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/checksum", func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
+		checksumCalls++
 		w.Header().Set("Content-Type", "application/yang-data+xml")
-		if len(calls) == 1 {
+		if checksumCalls == 1 {
 			w.Write([]byte(checksumXML("old-checksum")))
 			return
 		}
@@ -581,6 +638,14 @@ func TestReplaceZoneAndActivateWorkflow(t *testing.T) {
 			t.Errorf("expected PATCH, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/cfg", func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(definedConfigXML("cfg1", "zone_A")))
 	})
 	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_A", func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
@@ -614,6 +679,7 @@ func TestReplaceZoneAndActivateWorkflow(t *testing.T) {
 	}
 
 	want := []string{
+		"GET /rest/running/brocade-zone/defined-configuration/cfg",
 		"GET /rest/running/brocade-zone/effective-configuration/checksum",
 		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_A",
 		"PATCH /rest/running/brocade-zone/defined-configuration/zone",
@@ -678,13 +744,15 @@ func TestDeleteZoneRejectsMissingZone(t *testing.T) {
 func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
 	var calls []string
 	var patchedConfigs []DefinedConfigAPI
+	checksumCalls := 0
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.EscapedPath())
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/rest/running/brocade-zone/effective-configuration/checksum":
 			w.Header().Set("Content-Type", "application/yang-data+xml")
-			if len(calls) == 1 {
+			checksumCalls++
+			if checksumCalls == 1 {
 				w.Write([]byte(checksumXML("old-checksum")))
 				return
 			}
@@ -748,9 +816,9 @@ func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
 	}
 
 	want := []string{
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",
 		"GET /rest/running/brocade-zone/defined-configuration/cfg",
+		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",
+		"GET /rest/running/brocade-zone/effective-configuration/checksum",
 		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
 		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
 		"DELETE /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",

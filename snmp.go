@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // ==================== SNMP System ====================
 
@@ -35,7 +38,7 @@ type SNMPv1AccountResponse struct {
 type SNMPv1AccountInfo struct {
 	XMLName        xml.Name `xml:"v1-account" json:"-"`
 	Index          uint16   `xml:"index" json:"index"`
-	CommunityName  string   `xml:"community-name" json:"community_name"`
+	CommunityName  string   `xml:"community-name" json:"-"`
 	CommunityGroup string   `xml:"community-group" json:"community_group"`
 }
 
@@ -72,8 +75,8 @@ type SNMPv3AccountInfo struct {
 	UserGroup              string   `xml:"user-group" json:"user_group"`
 	AuthenticationProtocol string   `xml:"authentication-protocol" json:"authentication_protocol"`
 	PrivacyProtocol        string   `xml:"privacy-protocol" json:"privacy_protocol"`
-	AuthenticationPassword string   `xml:"authentication-password" json:"authentication_password,omitempty"`
-	PrivacyPassword        string   `xml:"privacy-password" json:"privacy_password,omitempty"`
+	AuthenticationPassword string   `xml:"authentication-password" json:"-"`
+	PrivacyPassword        string   `xml:"privacy-password" json:"-"`
 	ManagerEngineID        string   `xml:"manager-engine-id" json:"manager_engine_id"`
 }
 
@@ -100,8 +103,13 @@ type SNMPv3TrapInfo struct {
 
 // GetSNMPSystem 获取 SNMP 系统级配置
 func (c *Client) GetSNMPSystem() (*SNMPSystemInfo, error) {
+	return c.GetSNMPSystemWithContext(context.Background())
+}
+
+// GetSNMPSystemWithContext 获取 SNMP 系统级配置并允许取消请求。
+func (c *Client) GetSNMPSystemWithContext(ctx context.Context) (*SNMPSystemInfo, error) {
 	var resp SNMPSystemResponse
-	err := c.Get(c.endpoints().SNMPSystem(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SNMPSystem(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +118,13 @@ func (c *Client) GetSNMPSystem() (*SNMPSystemInfo, error) {
 
 // GetSNMPv1Accounts 获取所有 SNMPv1 社区字符串账户
 func (c *Client) GetSNMPv1Accounts() ([]SNMPv1AccountInfo, error) {
+	return c.GetSNMPv1AccountsWithContext(context.Background())
+}
+
+// GetSNMPv1AccountsWithContext 获取 SNMPv1 社区字符串账户并允许取消请求。
+func (c *Client) GetSNMPv1AccountsWithContext(ctx context.Context) ([]SNMPv1AccountInfo, error) {
 	var resp SNMPv1AccountResponse
-	err := c.Get(c.endpoints().SNMPv1Accounts(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SNMPv1Accounts(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +133,13 @@ func (c *Client) GetSNMPv1Accounts() ([]SNMPv1AccountInfo, error) {
 
 // GetSNMPv1Traps 获取所有 SNMPv1 Trap 接收者配置
 func (c *Client) GetSNMPv1Traps() ([]SNMPv1TrapInfo, error) {
+	return c.GetSNMPv1TrapsWithContext(context.Background())
+}
+
+// GetSNMPv1TrapsWithContext 获取 SNMPv1 Trap 接收者并允许取消请求。
+func (c *Client) GetSNMPv1TrapsWithContext(ctx context.Context) ([]SNMPv1TrapInfo, error) {
 	var resp SNMPv1TrapResponse
-	err := c.Get(c.endpoints().SNMPv1Traps(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SNMPv1Traps(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +148,13 @@ func (c *Client) GetSNMPv1Traps() ([]SNMPv1TrapInfo, error) {
 
 // GetSNMPv3Accounts 获取所有 SNMPv3 用户账户
 func (c *Client) GetSNMPv3Accounts() ([]SNMPv3AccountInfo, error) {
+	return c.GetSNMPv3AccountsWithContext(context.Background())
+}
+
+// GetSNMPv3AccountsWithContext 获取 SNMPv3 用户账户并允许取消请求。
+func (c *Client) GetSNMPv3AccountsWithContext(ctx context.Context) ([]SNMPv3AccountInfo, error) {
 	var resp SNMPv3AccountResponse
-	err := c.Get(c.endpoints().SNMPv3Accounts(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SNMPv3Accounts(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +163,13 @@ func (c *Client) GetSNMPv3Accounts() ([]SNMPv3AccountInfo, error) {
 
 // GetSNMPv3Traps 获取所有 SNMPv3 Trap 接收者配置
 func (c *Client) GetSNMPv3Traps() ([]SNMPv3TrapInfo, error) {
+	return c.GetSNMPv3TrapsWithContext(context.Background())
+}
+
+// GetSNMPv3TrapsWithContext 获取 SNMPv3 Trap 接收者并允许取消请求。
+func (c *Client) GetSNMPv3TrapsWithContext(ctx context.Context) ([]SNMPv3TrapInfo, error) {
 	var resp SNMPv3TrapResponse
-	err := c.Get(c.endpoints().SNMPv3Traps(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().SNMPv3Traps(), &resp)
 	if err != nil {
 		return nil, err
 	}

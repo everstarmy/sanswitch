@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // ChassisResponse 是 GET /brocade-chassis/chassis 的 XML 响应包装
 type ChassisResponse struct {
@@ -29,8 +32,13 @@ type HardwareInfo struct {
 // 若响应为空则返回 ErrNotFound。
 // 对应 API: GET /brocade-chassis/chassis
 func (c *Client) GetHardwareInfo() (*HardwareInfo, error) {
+	return c.GetHardwareInfoWithContext(context.Background())
+}
+
+// GetHardwareInfoWithContext 获取交换机机箱硬件信息并允许取消请求。
+func (c *Client) GetHardwareInfoWithContext(ctx context.Context) (*HardwareInfo, error) {
 	var resp ChassisResponse
-	err := c.Get(c.endpoints().Chassis(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().Chassis(), &resp)
 	if err != nil {
 		return nil, err
 	}

@@ -1,8 +1,10 @@
 package san
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -52,13 +54,18 @@ type EffectiveZoneResponse struct {
 // 返回的 ZoneInfo 中 Members 字段包含普通成员和 Principal 成员的合并列表。
 // 对应 API: GET /brocade-zone/defined-configuration/zone
 func (c *Client) GetDefinedZones() ([]ZoneInfo, error) {
+	return c.GetDefinedZonesWithContext(context.Background())
+}
+
+// GetDefinedZonesWithContext 获取 Zone 定义配置中的所有 Zone 列表。
+func (c *Client) GetDefinedZonesWithContext(ctx context.Context) ([]ZoneInfo, error) {
 	var resp DefinedZoneResponse
-	err := c.Get(c.endpoints().DefinedZones(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().DefinedZones(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	var zones []ZoneInfo
+	zones := make([]ZoneInfo, 0, len(resp.Zones))
 	for _, z := range resp.Zones {
 		zones = append(zones, ZoneInfo{
 			Name:        z.Name,
@@ -75,8 +82,13 @@ func (c *Client) GetDefinedZones() ([]ZoneInfo, error) {
 // GetDefinedZone 获取 Zone 定义配置中的单个 Zone。
 // 对应 API: GET /brocade-zone/defined-configuration/zone/zone-name/{name}
 func (c *Client) GetDefinedZone(name string) (*ZoneInfo, error) {
+	return c.GetDefinedZoneWithContext(context.Background(), name)
+}
+
+// GetDefinedZoneWithContext 获取 Zone 定义配置中的单个 Zone。
+func (c *Client) GetDefinedZoneWithContext(ctx context.Context, name string) (*ZoneInfo, error) {
 	var resp DefinedZoneResponse
-	if err := c.Get(c.endpoints().DefinedZone(name), &resp); err != nil {
+	if err := c.GetWithContext(ctx, c.endpoints().DefinedZone(name), &resp); err != nil {
 		if isNotFoundError(err) {
 			return nil, ErrNotFound
 		}
@@ -93,13 +105,18 @@ func (c *Client) GetDefinedZone(name string) (*ZoneInfo, error) {
 // 返回的 ZoneInfo 中 Members 字段包含普通成员和 Principal 成员的合并列表。
 // 对应 API: GET /brocade-zone/effective-configuration/enabled-zone
 func (c *Client) GetEffectiveZones() ([]ZoneInfo, error) {
+	return c.GetEffectiveZonesWithContext(context.Background())
+}
+
+// GetEffectiveZonesWithContext 获取已生效配置中的所有 Zone 列表。
+func (c *Client) GetEffectiveZonesWithContext(ctx context.Context) ([]ZoneInfo, error) {
 	var resp EffectiveZoneResponse
-	err := c.Get(c.endpoints().EffectiveZones(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().EffectiveZones(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	var zones []ZoneInfo
+	zones := make([]ZoneInfo, 0, len(resp.Zones))
 	for _, z := range resp.Zones {
 		zones = append(zones, ZoneInfo{
 			Name:        z.Name,
@@ -117,16 +134,18 @@ func (c *Client) GetEffectiveZones() ([]ZoneInfo, error) {
 // members 为普通成员（entry-name），principalMembers 为 Principal 成员（principal-entry-name）。
 // 对应 API: POST /brocade-zone/defined-configuration/zone
 func (c *Client) CreateZone(name string, members []string, principalMembers []string) error {
-	if err := c.ensureZoneAbsent(name); err != nil {
+	return c.CreateZoneWithContext(context.Background(), name, members, principalMembers)
+}
+
+// CreateZoneWithContext 在 Zone 定义配置中创建一个新的 Zone。
+func (c *Client) CreateZoneWithContext(ctx context.Context, name string, members []string, principalMembers []string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("zone name required")
+	}
+	if err := c.ensureZoneAbsentWithContext(ctx, name); err != nil {
 		return err
 	}
-	payload := DefinedZoneAPI{
-		Name:                name,
-		ZoneTypeString:      zoneTypeStringForCreate(principalMembers),
-		MemberEntryNames:    members,
-		PrincipalEntryNames: principalMembers,
-	}
-	return c.Post(c.endpoints().DefinedZones(), payload)
+	return c.PostWithContext(ctx, c.endpoints().DefinedZones(), definedZonePayload(name, members, principalMembers))
 }
 
 // CreateZoneAndActivate 执行完整的 Zone 创建并激活流程：
@@ -134,20 +153,22 @@ func (c *Client) CreateZone(name string, members []string, principalMembers []st
 // 2. 创建 Zone
 // 3. 将 Zone 添加到指定 cfg 配置中
 // 4. 保存配置并激活
-// 若 Zone 已在 cfg 中则不会重复添加。
+// 创建前要求 Zone 不存在；若 cfg 已包含该名称则不会重复添加。
 func (c *Client) CreateZoneAndActivate(cfgName, zoneName string, members []string, principalMembers []string) error {
+	return c.CreateZoneAndActivateWithContext(context.Background(), cfgName, zoneName, members, principalMembers)
+}
+
+// CreateZoneAndActivateWithContext 执行带 context 的 Zone 创建并激活流程。
+func (c *Client) CreateZoneAndActivateWithContext(ctx context.Context, cfgName, zoneName string, members []string, principalMembers []string) (err error) {
+	ctx = nonNilContext(ctx)
 	if err := validateZoneActivationInput(cfgName, zoneName, members); err != nil {
 		return err
 	}
 
-	checksum, err := c.GetZoneChecksum()
-	if err != nil {
-		return err
-	}
-	if err := c.CreateZone(zoneName, members, principalMembers); err != nil {
-		return err
-	}
-	configs, err := c.GetDefinedConfigs()
+	c.zoneWriteMu.Lock()
+	defer c.zoneWriteMu.Unlock()
+
+	configs, err := c.GetDefinedConfigsWithContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -155,39 +176,69 @@ func (c *Client) CreateZoneAndActivate(cfgName, zoneName string, members []strin
 	if err != nil {
 		return err
 	}
+	if err := c.ensureZoneAbsentWithContext(ctx, zoneName); err != nil {
+		return err
+	}
+	checksum, err := c.GetZoneChecksumWithContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err = c.ensureWriteSupported(); err != nil {
+		return err
+	}
+
+	mutationAttempted := false
+	defer func() {
+		if err == nil || !mutationAttempted {
+			return
+		}
+		if abortErr := c.abortZoneTransactionAfterFailure(); abortErr != nil {
+			err = errors.Join(err, fmt.Errorf("abort zone transaction: %w", abortErr))
+		}
+		err = &PartialMutationError{Err: err}
+	}()
+
+	mutationAttempted = true
+	if err = c.PostWithContext(ctx, c.endpoints().DefinedZones(), definedZonePayload(zoneName, members, principalMembers)); err != nil {
+		return err
+	}
 	if !containsString(memberZones, zoneName) {
 		memberZones = append(memberZones, zoneName)
 	}
-	if err := c.UpdateDefinedConfig(cfgName, memberZones); err != nil {
+	if err = c.UpdateDefinedConfigWithContext(ctx, cfgName, memberZones); err != nil {
 		return err
 	}
-	return c.saveAndActivateZoneConfig(cfgName, checksum)
+	return c.saveAndActivateZoneConfigWithContext(ctx, cfgName, checksum)
 }
 
 // UpdateZone 更新 Zone 定义配置中已有 Zone 的成员列表。
 // members 为普通成员，principalMembers 为 Principal 成员。
 // 对应 API: PATCH /brocade-zone/defined-configuration/zone
 func (c *Client) UpdateZone(name string, members []string, principalMembers []string) error {
-	zoneTypeString, err := c.zoneTypeStringForUpdate(name, principalMembers)
+	return c.UpdateZoneWithContext(context.Background(), name, members, principalMembers)
+}
+
+// UpdateZoneWithContext 更新 Zone 定义配置中已有 Zone 的成员列表。
+func (c *Client) UpdateZoneWithContext(ctx context.Context, name string, members []string, principalMembers []string) error {
+	zoneTypeString, err := c.zoneTypeStringForUpdateWithContext(ctx, name, principalMembers)
 	if err != nil {
 		return err
 	}
-	payload := DefinedZoneAPI{
-		Name:                name,
-		ZoneTypeString:      zoneTypeString,
-		MemberEntryNames:    members,
-		PrincipalEntryNames: principalMembers,
-	}
-	return c.Patch(c.endpoints().DefinedZones(), payload)
+	return c.patchZoneWithContext(ctx, zoneUpdatePayload(name, zoneTypeString, members, principalMembers))
 }
 
 // RenameZone 重命名 Zone 定义配置中的一个 Zone。
 // 对应 API: PATCH /brocade-zone/defined-configuration/zone/zone-name/{oldName}
 func (c *Client) RenameZone(oldName, newName string) error {
+	return c.RenameZoneWithContext(context.Background(), oldName, newName)
+}
+
+// RenameZoneWithContext 重命名 Zone 定义配置中的一个 Zone。
+func (c *Client) RenameZoneWithContext(ctx context.Context, oldName, newName string) error {
 	payload := DefinedZoneAPI{
 		Name: newName,
 	}
-	return c.Patch(c.endpoints().DefinedZone(oldName), payload)
+	return c.PatchWithContext(ctx, c.endpoints().DefinedZone(oldName), payload)
 }
 
 // ReplaceZoneAndActivate 执行完整的 Zone 替换并激活流程：
@@ -195,27 +246,68 @@ func (c *Client) RenameZone(oldName, newName string) error {
 // 2. 更新 Zone 成员列表（覆盖原有成员）
 // 3. 保存配置并激活
 func (c *Client) ReplaceZoneAndActivate(cfgName, zoneName string, members []string, principalMembers []string) error {
+	return c.ReplaceZoneAndActivateWithContext(context.Background(), cfgName, zoneName, members, principalMembers)
+}
+
+// ReplaceZoneAndActivateWithContext 执行带 context 的 Zone 替换并激活流程。
+func (c *Client) ReplaceZoneAndActivateWithContext(ctx context.Context, cfgName, zoneName string, members []string, principalMembers []string) (err error) {
+	ctx = nonNilContext(ctx)
 	if err := validateZoneActivationInput(cfgName, zoneName, members); err != nil {
 		return err
 	}
 
-	checksum, err := c.GetZoneChecksum()
+	c.zoneWriteMu.Lock()
+	defer c.zoneWriteMu.Unlock()
+
+	configs, err := c.GetDefinedConfigsWithContext(ctx)
 	if err != nil {
 		return err
 	}
-	if err := c.UpdateZone(zoneName, members, principalMembers); err != nil {
+	if _, err := memberZonesForConfig(configs, cfgName); err != nil {
 		return err
 	}
-	return c.saveAndActivateZoneConfig(cfgName, checksum)
+	checksum, err := c.GetZoneChecksumWithContext(ctx)
+	if err != nil {
+		return err
+	}
+	zoneTypeString, err := c.zoneTypeStringForUpdateWithContext(ctx, zoneName, principalMembers)
+	if err != nil {
+		return err
+	}
+	if err = c.ensureWriteSupported(); err != nil {
+		return err
+	}
+
+	mutationAttempted := false
+	defer func() {
+		if err == nil || !mutationAttempted {
+			return
+		}
+		if abortErr := c.abortZoneTransactionAfterFailure(); abortErr != nil {
+			err = errors.Join(err, fmt.Errorf("abort zone transaction: %w", abortErr))
+		}
+		err = &PartialMutationError{Err: err}
+	}()
+
+	mutationAttempted = true
+	if err = c.patchZoneWithContext(ctx, zoneUpdatePayload(zoneName, zoneTypeString, members, principalMembers)); err != nil {
+		return err
+	}
+	return c.saveAndActivateZoneConfigWithContext(ctx, cfgName, checksum)
 }
 
 // DeleteZone 从 Zone 定义配置中删除一个 Zone。
 // 对应 API: DELETE /brocade-zone/defined-configuration/zone/zone-name/{name}
 func (c *Client) DeleteZone(name string) error {
-	if _, err := c.GetDefinedZone(name); err != nil {
+	return c.DeleteZoneWithContext(context.Background(), name)
+}
+
+// DeleteZoneWithContext 从 Zone 定义配置中删除一个 Zone。
+func (c *Client) DeleteZoneWithContext(ctx context.Context, name string) error {
+	if _, err := c.GetDefinedZoneWithContext(ctx, name); err != nil {
 		return err
 	}
-	return c.Delete(c.endpoints().DefinedZone(name))
+	return c.DeleteWithContext(ctx, c.endpoints().DefinedZone(name))
 }
 
 // DeleteZoneAndActivate 执行完整的 Zone 删除并激活流程：
@@ -224,6 +316,12 @@ func (c *Client) DeleteZone(name string) error {
 // 3. 删除 Zone
 // 4. 保存配置并激活
 func (c *Client) DeleteZoneAndActivate(cfgName, zoneName string) error {
+	return c.DeleteZoneAndActivateWithContext(context.Background(), cfgName, zoneName)
+}
+
+// DeleteZoneAndActivateWithContext 执行带 context 的 Zone 删除并激活流程。
+func (c *Client) DeleteZoneAndActivateWithContext(ctx context.Context, cfgName, zoneName string) (err error) {
+	ctx = nonNilContext(ctx)
 	if strings.TrimSpace(cfgName) == "" {
 		return errors.New("cfg name required")
 	}
@@ -231,42 +329,68 @@ func (c *Client) DeleteZoneAndActivate(cfgName, zoneName string) error {
 		return errors.New("zone name required")
 	}
 
-	checksum, err := c.GetZoneChecksum()
+	c.zoneWriteMu.Lock()
+	defer c.zoneWriteMu.Unlock()
+
+	configs, err := c.GetDefinedConfigsWithContext(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := c.GetDefinedZone(zoneName); err != nil {
+	if _, err := memberZonesForConfig(configs, cfgName); err != nil {
 		return err
 	}
-	configs, err := c.GetDefinedConfigs()
+	if _, err := c.GetDefinedZoneWithContext(ctx, zoneName); err != nil {
+		return err
+	}
+	checksum, err := c.GetZoneChecksumWithContext(ctx)
 	if err != nil {
 		return err
 	}
+	if err = c.ensureWriteSupported(); err != nil {
+		return err
+	}
+
+	mutationAttempted := false
+	defer func() {
+		if err == nil || !mutationAttempted {
+			return
+		}
+		if abortErr := c.abortZoneTransactionAfterFailure(); abortErr != nil {
+			err = errors.Join(err, fmt.Errorf("abort zone transaction: %w", abortErr))
+		}
+		err = &PartialMutationError{Err: err}
+	}()
+
+	mutationAttempted = true
 	for _, cfg := range configs {
 		memberZones, removed := removeString(cfg.MemberZones, zoneName)
 		if !removed {
 			continue
 		}
-		if err := c.UpdateDefinedConfig(cfg.Name, memberZones); err != nil {
+		if err = c.UpdateDefinedConfigWithContext(ctx, cfg.Name, memberZones); err != nil {
 			return err
 		}
 	}
-	if err := c.Delete(c.endpoints().DefinedZone(zoneName)); err != nil {
+	if err = c.DeleteWithContext(ctx, c.endpoints().DefinedZone(zoneName)); err != nil {
 		return err
 	}
-	return c.saveAndActivateZoneConfig(cfgName, checksum)
+	return c.saveAndActivateZoneConfigWithContext(ctx, cfgName, checksum)
 }
 
 // saveAndActivateZoneConfig 保存 Zone 配置并使用新 checksum 激活指定的 cfg
 func (c *Client) saveAndActivateZoneConfig(cfgName, checksum string) error {
-	if err := c.SaveZoneConfig(checksum); err != nil {
+	return c.saveAndActivateZoneConfigWithContext(context.Background(), cfgName, checksum)
+}
+
+func (c *Client) saveAndActivateZoneConfigWithContext(ctx context.Context, cfgName, checksum string) error {
+	if err := c.SaveZoneConfigWithContext(ctx, checksum); err != nil {
 		return err
 	}
-	newChecksum, err := c.GetZoneChecksum()
+	newChecksum, err := c.GetZoneChecksumWithContext(ctx)
 	if err != nil {
 		return err
 	}
-	return c.ActivateZoneConfig(cfgName, newChecksum)
+	return c.ActivateZoneConfigWithContext(ctx, cfgName, newChecksum)
 }
 
 // validateZoneActivationInput 校验 Zone 激活操作所需的输入参数
@@ -291,7 +415,11 @@ func zoneTypeStringForCreate(principalMembers []string) string {
 }
 
 func (c *Client) ensureZoneAbsent(name string) error {
-	_, err := c.GetDefinedZone(name)
+	return c.ensureZoneAbsentWithContext(context.Background(), name)
+}
+
+func (c *Client) ensureZoneAbsentWithContext(ctx context.Context, name string) error {
+	_, err := c.GetDefinedZoneWithContext(ctx, name)
 	if err == nil {
 		return errors.New("zone already exists")
 	}
@@ -302,14 +430,56 @@ func (c *Client) ensureZoneAbsent(name string) error {
 }
 
 func (c *Client) zoneTypeStringForUpdate(name string, principalMembers []string) (string, error) {
-	zone, err := c.GetDefinedZone(name)
+	return c.zoneTypeStringForUpdateWithContext(context.Background(), name, principalMembers)
+}
+
+func (c *Client) zoneTypeStringForUpdateWithContext(ctx context.Context, name string, principalMembers []string) (string, error) {
+	zone, err := c.GetDefinedZoneWithContext(ctx, name)
 	if err != nil {
 		return "", err
 	}
 	if zone.TypeString == ZoneTypeZone && len(principalMembers) > 0 {
 		return "", errors.New("cannot convert zone to peer zone")
 	}
+	if zone.TypeString == ZoneTypeUserCreatedPeerZone && len(principalMembers) == 0 {
+		return "", errors.New("peer zone requires principal members")
+	}
+	if zone.TypeString != ZoneTypeZone && zone.TypeString != ZoneTypeUserCreatedPeerZone {
+		return "", fmt.Errorf("%w: unsupported zone type %q", ErrInvalidResponse, zone.TypeString)
+	}
 	return zone.TypeString, nil
+}
+
+func definedZonePayload(name string, members, principalMembers []string) DefinedZoneAPI {
+	return DefinedZoneAPI{
+		Name:                name,
+		ZoneTypeString:      zoneTypeStringForCreate(principalMembers),
+		MemberEntryNames:    members,
+		PrincipalEntryNames: principalMembers,
+	}
+}
+
+func zoneUpdatePayload(name, zoneTypeString string, members, principalMembers []string) DefinedZoneAPI {
+	return DefinedZoneAPI{
+		Name:                name,
+		ZoneTypeString:      zoneTypeString,
+		MemberEntryNames:    members,
+		PrincipalEntryNames: principalMembers,
+	}
+}
+
+func (c *Client) patchZoneWithContext(ctx context.Context, payload DefinedZoneAPI) error {
+	return c.PatchWithContext(ctx, c.endpoints().DefinedZones(), payload)
+}
+
+func (c *Client) abortZoneTransactionAfterFailure() error {
+	timeout := min(c.Timeout(), zoneCleanupTimeout)
+	if timeout <= 0 {
+		timeout = zoneCleanupTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return c.AbortZoneTransactionWithContext(ctx)
 }
 
 func zoneInfoFromDefinedZone(z DefinedZoneAPI) ZoneInfo {

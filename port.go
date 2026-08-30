@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // FibreChannelResponse 是 GET /brocade-interface/fibrechannel 的 XML 响应包装
 type FibreChannelResponse struct {
@@ -118,8 +121,13 @@ type PortInfo struct {
 // GetPorts 获取交换机上所有 FC 端口的详细信息
 // 对应 API: GET /brocade-interface/fibrechannel
 func (c *Client) GetPorts() ([]PortInfo, error) {
+	return c.GetPortsWithContext(context.Background())
+}
+
+// GetPortsWithContext 获取交换机上所有 FC 端口并允许取消请求。
+func (c *Client) GetPortsWithContext(ctx context.Context) ([]PortInfo, error) {
 	var resp FibreChannelResponse
-	err := c.Get(c.endpoints().FibreChannelPorts(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().FibreChannelPorts(), &resp)
 	if err != nil {
 		return nil, err
 	}

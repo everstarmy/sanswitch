@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // MediaRDPResponse 是 GET /brocade-media/media-rdp 的 XML 响应包装
 type MediaRDPResponse struct {
@@ -123,8 +126,13 @@ type MediaRDPInfo struct {
 // GetMediaRDPs 获取交换机上所有 SFP/XFP 光模块的原始诊断参数信息。
 // 对应 API: GET /brocade-media/media-rdp
 func (c *Client) GetMediaRDPs() ([]MediaRDPInfo, error) {
+	return c.GetMediaRDPsWithContext(context.Background())
+}
+
+// GetMediaRDPsWithContext 获取 SFP/XFP 诊断信息并允许取消请求。
+func (c *Client) GetMediaRDPsWithContext(ctx context.Context) ([]MediaRDPInfo, error) {
 	var resp MediaRDPResponse
-	err := c.Get(c.endpoints().MediaRDPs(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().MediaRDPs(), &resp)
 	if err != nil {
 		return nil, err
 	}

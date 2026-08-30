@@ -16,6 +16,7 @@ type SwitchInfo struct {
 	Principal       bool   `json:"principal"`
 }
 
+// ZoneMember contains the ordinary and principal members of a Zone.
 type ZoneMember struct {
 	MemberEntries    []string `json:"member"`
 	PrincipalEntries []string `json:"principal"`

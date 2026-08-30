@@ -1,6 +1,7 @@
 package san
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 )
@@ -33,12 +34,17 @@ type ErrorLogInfo struct {
 // GetErrorLogs 获取交换机上的所有 RAS 错误日志记录。
 // 对应 API: GET /brocade-logging/error-log
 func (c *Client) GetErrorLogs() ([]ErrorLogInfo, error) {
+	return c.GetErrorLogsWithContext(context.Background())
+}
+
+// GetErrorLogsWithContext 获取 RAS 错误日志并允许取消请求。
+func (c *Client) GetErrorLogsWithContext(ctx context.Context) ([]ErrorLogInfo, error) {
 	if err := c.ensureLoggingSupported("error-log"); err != nil {
 		return nil, err
 	}
 
 	var resp ErrorLogResponse
-	err := c.Get(c.endpoints().ErrorLogs(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().ErrorLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +84,17 @@ type AuditLogInfo struct {
 // GetAuditLogs 获取交换机上的所有审计日志记录。
 // 对应 API: GET /brocade-logging/audit-log
 func (c *Client) GetAuditLogs() ([]AuditLogInfo, error) {
+	return c.GetAuditLogsWithContext(context.Background())
+}
+
+// GetAuditLogsWithContext 获取审计日志并允许取消请求。
+func (c *Client) GetAuditLogsWithContext(ctx context.Context) ([]AuditLogInfo, error) {
 	if err := c.ensureLoggingSupported("audit-log"); err != nil {
 		return nil, err
 	}
 
 	var resp AuditLogResponse
-	err := c.Get(c.endpoints().AuditLogs(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().AuditLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}

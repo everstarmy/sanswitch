@@ -105,6 +105,47 @@ func TestGetSwitchInfo(t *testing.T) {
 	if info.IPAddress != "192.168.1.100" {
 		t.Errorf("unexpected IPAddress: %q", info.IPAddress)
 	}
+	if info.Fcid != "0x010000" || info.FcidHex != "0x010000" {
+		t.Errorf("unexpected FCID fields: fcid=%q fcid_hex=%q", info.Fcid, info.FcidHex)
+	}
+	if !info.Principal {
+		t.Error("expected Principal = true")
+	}
+}
+
+func TestGetSwitchInfoSelectsSwitchMatchingClientHost(t *testing.T) {
+	const switchesXML = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <fabric-switch>
+    <name>remote-wwn</name>
+    <switch-user-friendly-name>remote</switch-user-friendly-name>
+    <ip-address>192.168.1.101</ip-address>
+  </fabric-switch>
+  <fabric-switch>
+    <name>local-wwn</name>
+    <switch-user-friendly-name>local</switch-user-friendly-name>
+    <ip-address>192.168.1.100</ip-address>
+    <fcid>0x010001</fcid>
+  </fabric-switch>
+</Response>`
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/brocade-fabric/fabric-switch", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(switchesXML))
+	})
+
+	ts := newMockFOS(t, mux)
+	c := newTestClient(t, ts)
+	c.host = "192.168.1.100"
+
+	info, err := c.GetSwitchInfo()
+	if err != nil {
+		t.Fatalf("GetSwitchInfo() error: %v", err)
+	}
+	if info.Name != "local" || info.WWN != "local-wwn" || info.Fcid != "0x010001" {
+		t.Fatalf("selected wrong local switch: %+v", info)
+	}
 }
 
 func TestGetSwitchInfoNotFound(t *testing.T) {

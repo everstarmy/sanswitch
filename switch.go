@@ -1,6 +1,11 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+	"net"
+	"strings"
+)
 
 // FabricSwitchResponse 是 GET /brocade-fabric/fabric-switch 的 XML 响应包装
 type FabricSwitchResponse struct {
@@ -32,18 +37,28 @@ type FabricSwitch struct {
 // GetFabricSwitches 获取 Fabric 中所有交换机的详细信息
 // 对应 API: GET /brocade-fabric/fabric-switch
 func (c *Client) GetFabricSwitches() ([]FabricSwitch, error) {
+	return c.GetFabricSwitchesWithContext(context.Background())
+}
+
+// GetFabricSwitchesWithContext 获取 Fabric 中所有交换机的详细信息。
+func (c *Client) GetFabricSwitchesWithContext(ctx context.Context) ([]FabricSwitch, error) {
 	var resp FabricSwitchResponse
-	err := c.Get(c.endpoints().FabricSwitches(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().FabricSwitches(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Switches, nil
 }
 
-// GetSwitchInfo 获取当前登录交换机的摘要信息（取 Fabric 列表中的第一条记录）
+// GetSwitchInfo 获取当前登录交换机的摘要信息。
 // 若 Fabric 中无交换机则返回 ErrNotFound
 func (c *Client) GetSwitchInfo() (*SwitchInfo, error) {
-	switches, err := c.GetFabricSwitches()
+	return c.GetSwitchInfoWithContext(context.Background())
+}
+
+// GetSwitchInfoWithContext 获取当前登录交换机的摘要信息。
+func (c *Client) GetSwitchInfoWithContext(ctx context.Context) (*SwitchInfo, error) {
+	switches, err := c.GetFabricSwitchesWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +67,7 @@ func (c *Client) GetSwitchInfo() (*SwitchInfo, error) {
 		return nil, ErrNotFound
 	}
 
-	sw := switches[0]
+	sw := c.localFabricSwitch(switches)
 	return &SwitchInfo{
 		Name:            sw.SwitchUserFriendlyName,
 		WWN:             sw.Name,
@@ -63,5 +78,22 @@ func (c *Client) GetSwitchInfo() (*SwitchInfo, error) {
 		IPAddress:       sw.IPAddress,
 		IPv6Address:     sw.IPv6Address,
 		ChassisWWN:      sw.ChassisWWN,
+		Fcid:            sw.Fcid,
+		FcidHex:         sw.FcidHex,
+		Principal:       sw.IsPrincipal || sw.Principal != 0,
 	}, nil
+}
+
+func (c *Client) localFabricSwitch(switches []FabricSwitch) FabricSwitch {
+	host := strings.TrimSpace(c.host)
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		host = parsedHost
+	}
+	host = strings.Trim(host, "[]")
+	for _, sw := range switches {
+		if strings.EqualFold(host, sw.IPAddress) || strings.EqualFold(host, sw.IPv6Address) {
+			return sw
+		}
+	}
+	return switches[0]
 }

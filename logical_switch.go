@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // LogicalSwitchResponse 是 GET /brocade-fibrechannel-logical-switch/fibrechannel-logical-switch 的 XML 响应包装
 type LogicalSwitchResponse struct {
@@ -28,8 +31,13 @@ type LogicalSwitchInfo struct {
 // GetLogicalSwitches 获取交换机上所有逻辑交换机的配置信息。
 // 对应 API: GET /brocade-fibrechannel-logical-switch/fibrechannel-logical-switch
 func (c *Client) GetLogicalSwitches() ([]LogicalSwitchInfo, error) {
+	return c.GetLogicalSwitchesWithContext(context.Background())
+}
+
+// GetLogicalSwitchesWithContext 获取交换机上所有逻辑交换机并允许取消请求。
+func (c *Client) GetLogicalSwitchesWithContext(ctx context.Context) ([]LogicalSwitchInfo, error) {
 	var resp LogicalSwitchResponse
-	err := c.Get(c.endpoints().LogicalSwitches(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().LogicalSwitches(), &resp)
 	if err != nil {
 		return nil, err
 	}

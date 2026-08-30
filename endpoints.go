@@ -10,7 +10,8 @@ import (
 const legacyFOSVersion = "v8.2"
 
 type endpoints struct {
-	version fosMajorMinor
+	version                   fosMajorMinor
+	allowUnknownVersionWrites bool
 }
 
 type fosMajorMinor struct {
@@ -20,12 +21,19 @@ type fosMajorMinor struct {
 }
 
 func (c *Client) endpoints() endpoints {
-	return endpoints{version: parseFOSMajorMinor(c.fosVersion)}
+	c.stateMu.RLock()
+	version := c.fosVersion
+	allowUnknownVersionWrites := c.allowUnknownFOSVersionWrites
+	c.stateMu.RUnlock()
+	return endpoints{
+		version:                   parseFOSMajorMinor(version),
+		allowUnknownVersionWrites: allowUnknownVersionWrites,
+	}
 }
 
 func (e endpoints) allowWrite() bool {
 	if !e.version.known {
-		return true
+		return e.allowUnknownVersionWrites
 	}
 	if e.version.major > 9 {
 		return true

@@ -1,6 +1,7 @@
 package san
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 )
@@ -28,11 +29,16 @@ type FirmwareHistoryInfo struct {
 
 // GetFirmwareHistory 获取固件版本安装历史
 func (c *Client) GetFirmwareHistory() ([]FirmwareHistoryInfo, error) {
+	return c.GetFirmwareHistoryWithContext(context.Background())
+}
+
+// GetFirmwareHistoryWithContext 获取固件版本安装历史并允许取消请求。
+func (c *Client) GetFirmwareHistoryWithContext(ctx context.Context) ([]FirmwareHistoryInfo, error) {
 	if err := c.ensureFirmwareHistorySupported(); err != nil {
 		return nil, err
 	}
 	var resp FirmwareHistoryResponse
-	err := c.Get(c.endpoints().FirmwareHistory(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().FirmwareHistory(), &resp)
 	if err != nil {
 		return nil, err
 	}

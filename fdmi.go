@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // ==================== FDMI HBA ====================
 
@@ -41,8 +44,13 @@ type FDMIHBAInfo struct {
 // GetFDMIHBAs 获取 FDMI 中注册的所有 HBA 适配器信息。
 // 对应 API: GET /brocade-fdmi/hba
 func (c *Client) GetFDMIHBAs() ([]FDMIHBAInfo, error) {
+	return c.GetFDMIHBAsWithContext(context.Background())
+}
+
+// GetFDMIHBAsWithContext 获取 FDMI HBA 信息并允许取消请求。
+func (c *Client) GetFDMIHBAsWithContext(ctx context.Context) ([]FDMIHBAInfo, error) {
 	var resp FDMIHBAResponse
-	err := c.Get(c.endpoints().FDMIHBAs(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().FDMIHBAs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -54,13 +62,13 @@ func (c *Client) GetFDMIHBAs() ([]FDMIHBAInfo, error) {
 // FDMIResponse 是 GET /brocade-fdmi/port 的 XML 响应包装
 type FDMIResponse struct {
 	XMLName xml.Name       `xml:"Response"`
-	Ports   []FDMIportInfo `xml:"port"`
+	Ports   []FDMIPortInfo `xml:"port"`
 }
 
-// FDMIportInfo 描述 FDMI 中注册的一个 FC 端口，包含端口 WWN、所属 HBA、
+// FDMIPortInfo 描述 FDMI 中注册的一个 FC 端口，包含端口 WWN、所属 HBA、
 // 端口类型、支持的协议速率、当前速率、最大帧大小、主机名、VSA 等字段。
 // 对应 YANG 模型: brocade-fdmi/port
-type FDMIportInfo struct {
+type FDMIPortInfo struct {
 	XMLName                    xml.Name `xml:"port" json:"-"`
 	PortName                   string   `xml:"port-name" json:"port_name"`
 	HBAID                      string   `xml:"hba-id" json:"hba_id"`
@@ -97,11 +105,16 @@ type FDMIportInfo struct {
 	VSAEndToEndVersion         string   `xml:"vsa-end-to-end-version" json:"vsa_end_to_end_version"`
 }
 
-// GetFDMIports 获取 FDMI 中注册的所有 FC 端口信息。
+// GetFDMIPorts 获取 FDMI 中注册的所有 FC 端口信息。
 // 对应 API: GET /brocade-fdmi/port
-func (c *Client) GetFDMIports() ([]FDMIportInfo, error) {
+func (c *Client) GetFDMIPorts() ([]FDMIPortInfo, error) {
+	return c.GetFDMIPortsWithContext(context.Background())
+}
+
+// GetFDMIPortsWithContext 获取 FDMI 中注册的所有 FC 端口信息并允许取消请求。
+func (c *Client) GetFDMIPortsWithContext(ctx context.Context) ([]FDMIPortInfo, error) {
 	var resp FDMIResponse
-	err := c.Get(c.endpoints().FDMIPorts(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().FDMIPorts(), &resp)
 	if err != nil {
 		return nil, err
 	}

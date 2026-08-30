@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // FibreChannelStatisticsResponse 是 GET /brocade-interface/fibrechannel-statistics 的 XML 响应包装
 type FibreChannelStatisticsResponse struct {
@@ -137,8 +140,13 @@ type FibreChannelStatisticsInfo struct {
 // GetFibreChannelStatistics 获取所有 FC 端口的性能统计计数器
 // 对应 API: GET /brocade-interface/fibrechannel-statistics
 func (c *Client) GetFibreChannelStatistics() ([]FibreChannelStatisticsInfo, error) {
+	return c.GetFibreChannelStatisticsWithContext(context.Background())
+}
+
+// GetFibreChannelStatisticsWithContext 获取 FC 端口性能统计并允许取消请求。
+func (c *Client) GetFibreChannelStatisticsWithContext(ctx context.Context) ([]FibreChannelStatisticsInfo, error) {
 	var resp FibreChannelStatisticsResponse
-	err := c.Get(c.endpoints().FibreChannelStatistics(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().FibreChannelStatistics(), &resp)
 	if err != nil {
 		return nil, err
 	}

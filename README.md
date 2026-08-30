@@ -6,11 +6,13 @@ Brocade FOS REST API Go 客户端库，用于采集和管理 Brocade SAN 交换�
 
 - 覆盖 Brocade FOS 9.x REST API 的 **35+ 个采集端点**，涵盖 Fabric、端口、FRU、Zone、SFP、MAPS、Trunk、SNMP、NTP 等模块
 - `NewSANSwitch` 创建即自动登录，失败返回 `nil, err`
-- 默认 HTTPS + 跳过证书验证，可通过 `WithHTTP()` 切换为 HTTP
-- `SwitchAPI` 接口抽象，支持 Mock 测试与依赖注入
+- 默认 HTTPS 并校验证书；自签名证书可通过 `WithTLSConfig()` 配置，测试环境可显式使用 `WithInsecureSkipVerify()`
+- 按会话、交换机、Zone、清单和监控拆分的细粒度能力接口，便于依赖注入
 - `context.Context` 请求级取消与超时控制
 - `log/slog` 结构化日志
 - 自动重试 + 指数退避（网络错误、429、5xx）
+- 默认限制响应体为 16 MiB，避免异常响应造成无界内存增长
+- 仅依赖 Go 标准库，无第三方运行时依赖
 - FOS 结构化错误解析（`APIError`）
 - Virtual Fabric（VFID）支持
 - 函数选项模式（`ClientOption`）灵活配置
@@ -29,26 +31,41 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/everstarmy/sanswitch"
 )
 
 func main() {
-	// 创建并自动登录（默认 HTTPS + 跳过证书验证）
-	sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password")
+	host := os.Getenv("SAN_HOST")
+	username := os.Getenv("SAN_USERNAME")
+	password := os.Getenv("SAN_PASSWORD")
+	if host == "" || username == "" || password == "" {
+		log.Fatal("SAN_HOST、SAN_USERNAME、SAN_PASSWORD 必须设置")
+	}
+
+	// 创建并自动登录（默认 HTTPS 并校验证书）
+	sw, err := san.NewSANSwitch(host, username, password)
 	if err != nil {
 		log.Fatalf("登录失败: %v", err)
 	}
+	defer sw.Close()
 	defer sw.Logout()
 
 	// 获取 Fabric 中所有交换机
-	switches, _ := sw.GetFabricSwitches()
+	switches, err := sw.GetFabricSwitches()
+	if err != nil {
+		log.Fatalf("获取交换机列表失败: %v", err)
+	}
 	for _, s := range switches {
 		fmt.Printf("%s (Domain %d, IP %s)\n", s.Name, s.DomainID, s.IPAddress)
 	}
 
 	// 获取端口列表
-	ports, _ := sw.GetPorts()
+	ports, err := sw.GetPorts()
+	if err != nil {
+		log.Fatalf("获取端口列表失败: %v", err)
+	}
 	for _, p := range ports {
 		fmt.Printf("端口 %s: %s, 速率 %s\n", p.Name, p.OperationalStatusString, p.Speed)
 	}
@@ -57,23 +74,33 @@ func main() {
 
 更多示例请参考 [example/main.go](example/main.go)。
 
+运行示例前设置凭据，避免将密码写入源码或命令历史：
+
+```bash
+export SAN_HOST=192.168.1.100
+export SAN_USERNAME=admin
+export SAN_PASSWORD='change-me'
+go run ./example
+```
+
 ## 客户端配置
 
 通过 `ClientOption` 函数选项自定义客户端行为：
 
 ```go
 // HTTPS + 自动登录（默认）
-sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password",
+sw, err := san.NewSANSwitch(host, username, password,
 	san.WithTimeout(60*time.Second),       // 请求超时（默认 30s）
 	san.WithRetry(5),                      // 重试次数（默认 3）
 	san.WithRetryWait(2*time.Second),      // 重试初始等待（默认 1s）
 	san.WithRetryMaxWait(60*time.Second),  // 重试最大等待（默认 30s）
 	san.WithFOSVersion("v9.1.1"),          // 可选：直接使用 Client 时指定 FOS 版本
 	san.WithLogger(myLogger),              // 注入自定义 slog.Logger
+	san.WithTLSConfig(tlsConfig),          // 自定义 CA 或证书校验策略
 )
 
 // HTTP 模式（仅用于开发/测试环境）
-sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password",
+sw, err := san.NewSANSwitch(host, username, password,
 	san.WithHTTP(),
 )
 ```
@@ -84,16 +111,19 @@ sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password",
 | `WithRetry(n)` | `3` | 最大重试次数 |
 | `WithRetryWait(d)` | `1s` | 重试初始等待（指数退避起点） |
 | `WithRetryMaxWait(d)` | `30s` | 重试最大等待上限 |
-| `WithFOSVersion(v)` | 自动登录识别 / 默认 9.2+ | 指定 FOS 版本以兼容版本差异 endpoint |
+| `WithMaxResponseBodyBytes(n)` | `16 MiB` | 单个响应体的最大字节数，超限返回 `ErrResponseBodyTooLarge` |
+| `WithFOSVersion(v)` | 自动登录识别 / 未知时只读 | 指定 FOS 版本以兼容版本差异 endpoint |
 | `WithLogger(l)` | `slog.Default()` | 自定义结构化日志 |
+| `WithTLSConfig(c)` | 系统证书池 | 自定义 TLS/CA 配置 |
+| `WithInsecureSkipVerify()` | 关闭 | 显式关闭 HTTPS 证书校验，仅建议测试使用 |
+| `WithAllowUnknownFOSVersionWrites()` | 关闭 | 显式允许未知 FOS 版本执行写操作 |
 | `WithHTTP()` | HTTPS | 使用 HTTP 替代 HTTPS |
-```
 
-版本识别规则：登录响应包含 `firmware-version` 时会自动记录版本，并按 `vX.Y` 选择兼容 endpoint；若登录无响应体，则按低于 9.1 的旧版 FOS 处理。低于 9.1 的版本不允许执行 `POST` / `PATCH` 写操作。`GetHistoryLogs`、`GetSensors`、`GetErrorLogs` 和 `GetAuditLogs` 需要 FOS 9.0+，`GetFirmwareHistory` 需要 FOS 9.1+。
+版本识别规则：登录响应包含 `firmware-version` 时会自动记录版本，并按 `vX.Y` 选择兼容 endpoint；若登录无响应体，则按低于 9.1 的旧版 FOS 处理。未知版本默认禁止写操作，可通过 `WithFOSVersion()` 或显式的 `WithAllowUnknownFOSVersionWrites()` 配置。低于 9.1 的版本不允许执行写操作。`GetHistoryLogs`、`GetSensors`、`GetErrorLogs` 和 `GetAuditLogs` 需要 FOS 9.0+，`GetFirmwareHistory` 需要 FOS 9.1+。
 
 ### 调试日志
 
-`SetVerbose(true)` 会启用 `slog.LevelDebug`，输出 HTTP 请求/响应调试日志：
+`SetVerbose(true)` 会启用 `slog.LevelDebug`，输出 HTTP 请求/响应元数据；为避免泄露 Token、SNMP 凭据等敏感信息，不输出请求和响应 Body：
 
 ```go
 sw.SetVerbose(true)
@@ -112,7 +142,7 @@ sw.SetVerbose(true)
 logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 	Level: slog.LevelDebug,
 }))
-sw, err := san.NewSANSwitch("192.168.1.100", "admin", "password", san.WithLogger(logger))
+sw, err := san.NewSANSwitch(host, username, password, san.WithLogger(logger))
 ```
 
 ### Virtual Fabric 支持
@@ -235,7 +265,7 @@ err := sw.CreateZone(
 | 方法 | REST 端点 | 说明 |
 |------|----------|------|
 | `GetFDMIHBAs()` | `/brocade-fdmi/hba` | 获取 HBA 卡信息 |
-| `GetFDMIports()` | `/brocade-fdmi/port` | 获取 FDMI 端口信息 |
+| `GetFDMIPorts()` | `/brocade-fdmi/port` | 获取 FDMI 端口信息 |
 
 ### 10. Trunk（ISL 链路聚合）
 
@@ -282,7 +312,7 @@ err := sw.CreateZone(
 | 基本信息 | 3 | — | 3 |
 | 端口与统计 | 2 | — | 2 |
 | 逻辑交换机 | 1 | — | 1 |
-| Zone 管理 | 7 | 15 | 22 |
+| Zone 管理 | 9 | 15 | 24 |
 | FRU 组件 | 5 | — | 5 |
 | MAPS 监控 | 2 | — | 2 |
 | SFP / Media | 1 | — | 1 |
@@ -293,21 +323,27 @@ err := sw.CreateZone(
 | SNMP | 5 | — | 5 |
 | Time / NTP | 2 | — | 2 |
 | 日志 | 2 | — | 2 |
-| **合计** | **37** | **15** | **52** |
+| **合计** | **39** | **15** | **54** |
 
 ## Context 支持
 
-所有 HTTP 方法均提供 `WithContext` 变体，支持请求级取消与超时控制：
+所有网络相关的 Client 和 SANSwitch 方法都提供 `WithContext` 变体，支持请求级取消与超时控制。无 Context 方法仅作为使用 `context.Background()` 的便捷封装：
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 defer cancel()
 
-var resp LoginResponse
-err := client.GetWithContext(ctx, "/login", &resp)
+sw, err := san.NewSANSwitchWithContext(ctx, host, username, password)
+if err != nil {
+	log.Fatal(err)
+}
+switches, err := sw.GetFabricSwitchesWithContext(ctx)
+if err != nil {
+	log.Fatal(err)
+}
 ```
 
-可用的 Context 方法：`GetWithContext`、`PostWithContext`、`PatchWithContext`、`DeleteWithContext`。
+底层方法包括：`GetWithContext`、`PostWithContext`、`PatchWithContext`、`DeleteWithContext`、`LoginWithContext`、`LogoutWithContext`；所有高层采集、Zone 写操作和事务操作也提供对应方法。
 
 ## 错误处理
 
@@ -325,29 +361,32 @@ if errors.As(err, &apiErr) {
 }
 ```
 
-预定义错误：`ErrNotFound`、`ErrUnauthorized`、`ErrConnectionFailed`、`ErrInvalidResponse`、`ErrTimeout`。
+预定义错误：`ErrNotFound`、`ErrUnauthorized`、`ErrConnectionFailed`、`ErrInvalidResponse`、`ErrTimeout`、`ErrUnsupportedOperation`、`ErrResponseBodyTooLarge`。
+
+Zone 多步操作若在远端变更后失败，会返回 `PartialMutationError`；客户端会尝试自动中止事务，但调用方仍应检查交换机最终状态。
 
 ## 接口抽象
 
-`SwitchAPI` 接口定义了所有操作，支持 Mock 测试：
+库不再暴露一个包含所有能力的巨型接口。`Session`、`SwitchReader`、`ZoneReader`、`ZoneWriter`、`InventoryReader` 和 `MonitoringReader` 均以 Context 方法为主，调用方可以按依赖范围选择：
 
 ```go
-// 编译期断言
-var _ san.SwitchAPI = (*san.SANSwitch)(nil)
+type PortReader interface {
+	GetPortsWithContext(context.Context) ([]san.PortInfo, error)
+}
 
-// Mock 示例
-type MockSwitch struct { san.SwitchAPI }
-func (m *MockSwitch) GetPorts() ([]san.PortInfo, error) {
-	return []san.PortInfo{{Name: "0/0", Speed: "32000000000"}}, nil
+func collectPorts(ctx context.Context, reader PortReader) ([]san.PortInfo, error) {
+	return reader.GetPortsWithContext(ctx)
 }
 ```
+
+如果业务只需要一两个方法，建议像上面一样在业务包内定义更窄的接口；`SANSwitch` 已通过编译期断言实现这些能力接口。
 
 ## 技术栈
 
 | 组件 | 选型 |
 |------|------|
 | 语言 | Go 1.21+ |
-| HTTP 客户端 | [go-resty/resty/v2](https://github.com/go-resty/resty) |
+| HTTP 客户端 | `net/http`（Go 标准库） |
 | 数据格式 | XML（Brocade YANG Data Model `application/yang-data+xml`） |
 | 日志 | `log/slog`（Go 标准库） |
 | 测试 | `net/http/httptest`（标准库） |
@@ -356,7 +395,9 @@ func (m *MockSwitch) GetPorts() ([]san.PortInfo, error) {
 
 ```
 ├── client.go           # HTTP 客户端、认证、重试、Context 支持
-├── san.go              # SwitchAPI 接口 + SANSwitch facade
+├── doc.go              # 包文档
+├── san.go              # SANSwitch facade
+├── interfaces.go       # 细粒度能力接口
 ├── types.go            # 公共类型定义
 ├── errors.go           # 错误类型与 APIError
 ├── switch.go           # Fabric Switch 采集
@@ -377,6 +418,7 @@ func (m *MockSwitch) GetPorts() ([]san.PortInfo, error) {
 ├── snmp.go             # SNMP 配置
 ├── time.go             # NTP 时钟与时间区
 ├── logging.go          # 日志（error-log / audit-log）
+├── Makefile            # 本地质量检查入口
 ├── *_test.go           # 单元测试
 ├── example/
 │   └── main.go         # 使用示例
@@ -388,3 +430,12 @@ func (m *MockSwitch) GetPorts() ([]san.PortInfo, error) {
 
 - [Fabric OS REST API Overview](https://techdocs.broadcom.com/us/en/fibre-channel-networking/fabric-os/fabric-os-rest-api/9-2-x.html)
 - Brocade FOS 9.2.x REST API Reference (fos-92x-restapi.pdf)
+
+## 模块与发布
+
+- 模块路径：`github.com/everstarmy/sanswitch`
+- 支持 Go 1.21 及以上；库本身不锁定 `toolchain`，由调用方选择工具链补丁版本
+- 运行时仅使用 Go 标准库，`go list -m all` 不应出现第三方模块
+- 每次发布前执行 `go mod tidy -diff`、`go mod verify`、`go test -race ./...` 和 `go vet ./...`
+- 本地可直接运行 `make check` 执行格式、模块、测试、竞态和 vet 检查
+- 版本变更记录维护在 [CHANGELOG.md](CHANGELOG.md)，Git tag 遵循 SemVer

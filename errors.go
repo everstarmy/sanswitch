@@ -19,6 +19,8 @@ var (
 	ErrTimeout = errors.New("request timeout")
 	// ErrUnsupportedOperation 当前 FOS 版本不支持该操作
 	ErrUnsupportedOperation = errors.New("operation unsupported by FOS version")
+	// ErrResponseBodyTooLarge 服务端响应超过客户端允许的大小上限
+	ErrResponseBodyTooLarge = errors.New("response body too large")
 )
 
 // APIError 表示 FOS REST API 返回的结构化错误
@@ -29,9 +31,36 @@ type APIError struct {
 	ErrorCode  string   `xml:"error>error-code" json:"error_code"`
 }
 
+// PartialMutationError indicates that a multi-step Zone operation failed after
+// at least one remote mutation had been attempted. The underlying error is
+// preserved for errors.Is and errors.As.
+type PartialMutationError struct {
+	Err error
+}
+
+func (e *PartialMutationError) Error() string {
+	return fmt.Sprintf("zone operation may have left a remote mutation: %v", e.Err)
+}
+
+func (e *PartialMutationError) Unwrap() error {
+	return e.Err
+}
+
 func (e *APIError) Error() string {
 	if e.ErrorCode != "" {
-		return fmt.Sprintf("FOS API error (status %d, code %s): %s", e.StatusCode, e.ErrorCode, e.Message)
+		return fmt.Sprintf("fos api error (status %d, code %s): %s", e.StatusCode, e.ErrorCode, e.Message)
 	}
-	return fmt.Sprintf("FOS API error (status %d): %s", e.StatusCode, e.Message)
+	return fmt.Sprintf("fos api error (status %d): %s", e.StatusCode, e.Message)
+}
+
+// Unwrap maps common HTTP statuses to package-level sentinel errors.
+func (e *APIError) Unwrap() error {
+	switch e.StatusCode {
+	case 404:
+		return ErrNotFound
+	case 401:
+		return ErrUnauthorized
+	default:
+		return nil
+	}
 }

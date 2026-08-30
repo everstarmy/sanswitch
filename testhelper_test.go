@@ -18,7 +18,7 @@ func newMockFOS(t *testing.T, mux *http.ServeMux) *httptest.Server {
 // newTestClient 创建一个指向测试服务器的 Client，跳过 Login。
 func newTestClient(t *testing.T, ts *httptest.Server) *Client {
 	t.Helper()
-	c := NewClient("localhost", "admin", "password")
+	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.2.0"))
 	c.baseURL = ts.URL + "/rest/running"
 	return c
 }

@@ -178,6 +178,9 @@ func TestLogout(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
+		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+			t.Errorf("expected logout token, got %q", got)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -400,8 +403,7 @@ func TestSetVerboseTogglesDebugLogging(t *testing.T) {
 func TestGetWithContextCancel(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rest/running/slow", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(2 * time.Second)
-		w.WriteHeader(http.StatusOK)
+		<-r.Context().Done()
 	})
 
 	ts := newMockFOS(t, mux)
@@ -417,6 +419,42 @@ func TestGetWithContextCancel(t *testing.T) {
 	err := c.GetWithContext(ctx, "/slow", &resp)
 	if err == nil {
 		t.Fatal("expected context deadline error, got nil")
+	}
+}
+
+func TestResponseBodyLimit(t *testing.T) {
+	attempts := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/large", func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Repeat("x", 64)))
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password",
+		WithRetry(3),
+		WithMaxResponseBodyBytes(32),
+	)
+	c.baseURL = ts.URL + "/rest/running"
+
+	var resp struct{}
+	err := c.Get("/large", &resp)
+	if !errors.Is(err, ErrResponseBodyTooLarge) {
+		t.Fatalf("Get() error = %v; want ErrResponseBodyTooLarge", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("large response was retried %d times; want 1 attempt", attempts)
+	}
+}
+
+func TestClientCloseIsIdempotent(t *testing.T) {
+	c := NewClient("switch.example", "admin", "password")
+	if err := c.Close(); err != nil {
+		t.Fatalf("first Close() error: %v", err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatalf("second Close() error: %v", err)
 	}
 }
 
@@ -472,6 +510,7 @@ func TestPostDoesNotRetryOnServerError(t *testing.T) {
 		WithRetry(3),
 		WithRetryWait(10*time.Millisecond),
 		WithRetryMaxWait(20*time.Millisecond),
+		WithFOSVersion("v9.2.0"),
 	)
 	c.baseURL = ts.URL + "/rest/running"
 
@@ -481,5 +520,177 @@ func TestPostDoesNotRetryOnServerError(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("expected POST to be attempted once, got %d attempts", attempts)
+	}
+}
+
+func TestWriteRequiresKnownFOSVersion(t *testing.T) {
+	called := false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/test/create", func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+
+	err := c.Post("/test/create", nil)
+	if !errors.Is(err, ErrUnsupportedOperation) {
+		t.Fatalf("expected ErrUnsupportedOperation, got %v", err)
+	}
+	if called {
+		t.Fatal("expected unknown FOS version to block the write before HTTP")
+	}
+}
+
+func TestUnknownFOSVersionWritesCanBeExplicitlyEnabled(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/test/create", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password", WithAllowUnknownFOSVersionWrites())
+	c.baseURL = ts.URL + "/rest/running"
+
+	if err := c.Post("/test/create", nil); err != nil {
+		t.Fatalf("expected explicitly enabled write to succeed, got %v", err)
+	}
+}
+
+func TestLoginRequiresAuthorizationHeader(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(loginXML))
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+
+	_, err := c.Login()
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("expected ErrInvalidResponse, got %v", err)
+	}
+	if c.IsLoggedIn() {
+		t.Fatal("client must remain logged out when the response has no token")
+	}
+}
+
+func TestFailedReloginClearsPreviousToken(t *testing.T) {
+	attempts := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/login", func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.Header().Set("Authorization", "Bearer first-token")
+			w.Header().Set("Content-Type", "application/yang-data+xml")
+			w.Write([]byte(loginXML))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+	if _, err := c.Login(); err != nil {
+		t.Fatalf("first Login() error: %v", err)
+	}
+	if !c.IsLoggedIn() {
+		t.Fatal("expected client to be logged in after first login")
+	}
+
+	if _, err := c.Login(); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized, got %v", err)
+	}
+	if c.IsLoggedIn() {
+		t.Fatal("failed re-login must not leave the old token installed")
+	}
+}
+
+func TestUnauthorizedResponseClearsToken(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Authorization", "Bearer token")
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(loginXML))
+	})
+	mux.HandleFunc("/rest/running/test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	ts := newMockFOS(t, mux)
+	c := NewClient("localhost", "admin", "password")
+	c.baseURL = ts.URL + "/rest/running"
+	if _, err := c.Login(); err != nil {
+		t.Fatalf("Login() error: %v", err)
+	}
+
+	var result struct{}
+	if err := c.Get("/test", &result); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized, got %v", err)
+	}
+	if c.IsLoggedIn() {
+		t.Fatal("401 response must clear the local token")
+	}
+}
+
+func TestDebugLogsDoNotContainResponseBody(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/running/log-test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yang-data+xml")
+		w.Write([]byte(`<?xml version="1.0"?><Response><secret>do-not-log-this</secret></Response>`))
+	})
+
+	ts := newMockFOS(t, mux)
+	c := newTestClient(t, ts)
+	var logs bytes.Buffer
+	c.SetLogOutput(&logs)
+	c.SetVerbose(true)
+
+	var result struct {
+		Secret string `xml:"secret"`
+	}
+	if err := c.Get("/log-test", &result); err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	if strings.Contains(logs.String(), "do-not-log-this") {
+		t.Fatalf("debug log leaked response body: %q", logs.String())
+	}
+	if !strings.Contains(logs.String(), "GET response") {
+		t.Fatalf("expected request metadata in debug log, got %q", logs.String())
+	}
+}
+
+func TestNewClientTLSConfiguration(t *testing.T) {
+	secure := NewClient("switch.example", "admin", "password")
+	secureTransport, ok := secure.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", secure.client.Transport)
+	}
+	if secureTransport.TLSClientConfig != nil && secureTransport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("TLS certificate verification must be enabled by default")
+	}
+
+	insecure := NewClient("switch.example", "admin", "password", WithInsecureSkipVerify())
+	insecureTransport, ok := insecure.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", insecure.client.Transport)
+	}
+	if insecureTransport.TLSClientConfig == nil || !insecureTransport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("WithInsecureSkipVerify() must explicitly disable certificate verification")
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	wait, ok := parseRetryAfter("2")
+	if !ok || wait != 2*time.Second {
+		t.Fatalf("parseRetryAfter(2) = %v, %v; want 2s, true", wait, ok)
+	}
+	if _, ok := parseRetryAfter("not-a-duration"); ok {
+		t.Fatal("expected invalid Retry-After to be rejected")
 	}
 }

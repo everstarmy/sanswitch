@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // ==================== Trunk Members ====================
 
@@ -74,8 +77,13 @@ type TrunkAreaInfo struct {
 
 // GetTrunks 获取交换机上所有 Trunk 成员列表
 func (c *Client) GetTrunks() ([]TrunkInfo, error) {
+	return c.GetTrunksWithContext(context.Background())
+}
+
+// GetTrunksWithContext 获取交换机上所有 Trunk 成员并允许取消请求。
+func (c *Client) GetTrunksWithContext(ctx context.Context) ([]TrunkInfo, error) {
 	var resp TrunkResponse
-	err := c.Get(c.endpoints().Trunks(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().Trunks(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +92,13 @@ func (c *Client) GetTrunks() ([]TrunkInfo, error) {
 
 // GetTrunkPerformances 获取所有 Trunk 的性能统计
 func (c *Client) GetTrunkPerformances() ([]TrunkPerformanceInfo, error) {
+	return c.GetTrunkPerformancesWithContext(context.Background())
+}
+
+// GetTrunkPerformancesWithContext 获取 Trunk 性能统计并允许取消请求。
+func (c *Client) GetTrunkPerformancesWithContext(ctx context.Context) ([]TrunkPerformanceInfo, error) {
 	var resp TrunkPerformanceResponse
-	err := c.Get(c.endpoints().TrunkPerformances(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().TrunkPerformances(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +107,13 @@ func (c *Client) GetTrunkPerformances() ([]TrunkPerformanceInfo, error) {
 
 // GetTrunkAreas 获取所有 Trunk Area 组信息
 func (c *Client) GetTrunkAreas() ([]TrunkAreaInfo, error) {
+	return c.GetTrunkAreasWithContext(context.Background())
+}
+
+// GetTrunkAreasWithContext 获取 Trunk Area 信息并允许取消请求。
+func (c *Client) GetTrunkAreasWithContext(ctx context.Context) ([]TrunkAreaInfo, error) {
 	var resp TrunkAreaResponse
-	err := c.Get(c.endpoints().TrunkAreas(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().TrunkAreas(), &resp)
 	if err != nil {
 		return nil, err
 	}

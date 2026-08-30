@@ -1,6 +1,9 @@
 package san
 
-import "encoding/xml"
+import (
+	"context"
+	"encoding/xml"
+)
 
 // ==================== Time Zone ====================
 
@@ -39,8 +42,13 @@ type ClockServerInfo struct {
 
 // GetTimeZone 获取交换机时区配置
 func (c *Client) GetTimeZone() (*TimeZoneInfo, error) {
+	return c.GetTimeZoneWithContext(context.Background())
+}
+
+// GetTimeZoneWithContext 获取交换机时区配置并允许取消请求。
+func (c *Client) GetTimeZoneWithContext(ctx context.Context) (*TimeZoneInfo, error) {
 	var resp TimeZoneResponse
-	err := c.Get(c.endpoints().TimeZone(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().TimeZone(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +57,13 @@ func (c *Client) GetTimeZone() (*TimeZoneInfo, error) {
 
 // GetClockServer 获取交换机 NTP 时钟服务器配置
 func (c *Client) GetClockServer() (*ClockServerInfo, error) {
+	return c.GetClockServerWithContext(context.Background())
+}
+
+// GetClockServerWithContext 获取交换机 NTP 时钟服务器配置并允许取消请求。
+func (c *Client) GetClockServerWithContext(ctx context.Context) (*ClockServerInfo, error) {
 	var resp ClockServerResponse
-	err := c.Get(c.endpoints().ClockServer(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().ClockServer(), &resp)
 	if err != nil {
 		return nil, err
 	}

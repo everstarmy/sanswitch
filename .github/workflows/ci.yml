@@ -1,0 +1,45 @@
+name: Go CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        go-version: ["1.21.x", "stable"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Check formatting
+        run: test -z "$(find . -type f -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -l)"
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Check module tidy diff
+        run: go mod tidy -diff
+
+      - name: Enforce standard-library-only module
+        run: |
+          test "$(go list -mod=readonly -m all | wc -l | tr -d ' ')" -eq 1
+          test ! -e go.sum
+          test ! -d vendor
+
+      - name: Run tests
+        run: go test -mod=readonly ./...
+
+      - name: Run race detector
+        run: go test -mod=readonly -race ./...
+
+      - name: Run go vet
+        run: go vet -mod=readonly ./...

@@ -1,6 +1,7 @@
 package san
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 )
@@ -239,8 +240,13 @@ type SensorInfo struct {
 // GetBlades 获取交换机上所有 FRU 板卡的详细信息。
 // 对应 API: GET /brocade-fru/blade
 func (c *Client) GetBlades() ([]BladeInfo, error) {
+	return c.GetBladesWithContext(context.Background())
+}
+
+// GetBladesWithContext 获取交换机上所有 FRU 板卡并允许取消请求。
+func (c *Client) GetBladesWithContext(ctx context.Context) ([]BladeInfo, error) {
 	var resp BladeResponse
-	err := c.Get(c.endpoints().Blades(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().Blades(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -250,8 +256,13 @@ func (c *Client) GetBlades() ([]BladeInfo, error) {
 // GetFans 获取交换机上所有风扇单元的详细信息。
 // 对应 API: GET /brocade-fru/fan
 func (c *Client) GetFans() ([]FanInfo, error) {
+	return c.GetFansWithContext(context.Background())
+}
+
+// GetFansWithContext 获取交换机上所有风扇单元并允许取消请求。
+func (c *Client) GetFansWithContext(ctx context.Context) ([]FanInfo, error) {
 	var resp FanResponse
-	err := c.Get(c.endpoints().Fans(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().Fans(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -261,8 +272,13 @@ func (c *Client) GetFans() ([]FanInfo, error) {
 // GetPowerSupplies 获取交换机上所有电源单元的详细信息。
 // 对应 API: GET /brocade-fru/power-supply
 func (c *Client) GetPowerSupplies() ([]PowerSupplyInfo, error) {
+	return c.GetPowerSuppliesWithContext(context.Background())
+}
+
+// GetPowerSuppliesWithContext 获取交换机上所有电源单元并允许取消请求。
+func (c *Client) GetPowerSuppliesWithContext(ctx context.Context) ([]PowerSupplyInfo, error) {
 	var resp PowerSupplyResponse
-	err := c.Get(c.endpoints().PowerSupplies(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().PowerSupplies(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -272,11 +288,16 @@ func (c *Client) GetPowerSupplies() ([]PowerSupplyInfo, error) {
 // GetHistoryLogs 获取 FRU 组件的历史日志记录。
 // 对应 API: GET /brocade-fru/history-log
 func (c *Client) GetHistoryLogs() ([]HistoryLogInfo, error) {
+	return c.GetHistoryLogsWithContext(context.Background())
+}
+
+// GetHistoryLogsWithContext 获取 FRU 历史日志并允许取消请求。
+func (c *Client) GetHistoryLogsWithContext(ctx context.Context) ([]HistoryLogInfo, error) {
 	if err := c.ensureFRUHistoryLogSensorSupported("FRU history-log"); err != nil {
 		return nil, err
 	}
 	var resp HistoryLogResponse
-	err := c.Get(c.endpoints().HistoryLogs(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().HistoryLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -286,11 +307,16 @@ func (c *Client) GetHistoryLogs() ([]HistoryLogInfo, error) {
 // GetSensors 获取交换机上所有传感器的详细信息。
 // 对应 API: GET /brocade-fru/sensor
 func (c *Client) GetSensors() ([]SensorInfo, error) {
+	return c.GetSensorsWithContext(context.Background())
+}
+
+// GetSensorsWithContext 获取交换机上所有传感器并允许取消请求。
+func (c *Client) GetSensorsWithContext(ctx context.Context) ([]SensorInfo, error) {
 	if err := c.ensureFRUHistoryLogSensorSupported("FRU sensor"); err != nil {
 		return nil, err
 	}
 	var resp SensorResponse
-	err := c.Get(c.endpoints().Sensors(), &resp)
+	err := c.GetWithContext(ctx, c.endpoints().Sensors(), &resp)
 	if err != nil {
 		return nil, err
 	}
