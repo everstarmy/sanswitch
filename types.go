@@ -1,7 +1,7 @@
-package san
+package sanswitch
 
-// SwitchInfo 表示单台交换机的摘要信息，由 GetSwitchInfo 从 FabricSwitch 中提取
-type SwitchInfo struct {
+// Switch 表示单台交换机的摘要信息，由 FabricSwitch 中的原始数据提取。
+type Switch struct {
 	Name            string `json:"name"`
 	WWN             string `json:"wwn"`
 	ChassisWWN      string `json:"chassis_wwn"`
@@ -22,8 +22,8 @@ type ZoneMember struct {
 	PrincipalEntries []string `json:"principal"`
 }
 
-// ZoneInfo 表示一个 Zone（已定义或已生效），包含名称、成员列表和类型
-type ZoneInfo struct {
+// Zone 表示一个 Zone（已定义或已生效），包含名称、成员列表和类型
+type Zone struct {
 	Name    string     `json:"name"`
 	Members ZoneMember `json:"members"`
 
@@ -32,14 +32,14 @@ type ZoneInfo struct {
 	TypeString  string `json:"type_string"`
 }
 
-// AliasInfo 表示一个 Zone Alias，包含名称和成员列表
-type AliasInfo struct {
+// Alias 表示一个 Zone Alias，包含名称和成员列表
+type Alias struct {
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
 }
 
-// ConfigInfo 表示一个 Zone 配置（cfg），包含配置名称、类型、成员 Zone 列表和校验和
-type ConfigInfo struct {
+// ZoneConfig 表示一个 Zone 配置（cfg），包含配置名称、类型、成员 Zone 列表和校验和
+type ZoneConfig struct {
 	Name              string   `json:"name"`
 	Type              string   `json:"type"`
 	MemberZones       []string `json:"member_zones"`
@@ -47,8 +47,8 @@ type ConfigInfo struct {
 	DefaultZoneAccess string   `json:"default_zone_access"`
 }
 
-// ZoneDatabaseInfo 表示 Zone 数据库的容量和事务状态信息
-type ZoneDatabaseInfo struct {
+// ZoneDatabase 表示 Zone 数据库的容量和事务状态信息
+type ZoneDatabase struct {
 	DBMax                  uint32 `json:"db_max"`
 	DBAvail                uint32 `json:"db_avail"`
 	DBCommitted            uint32 `json:"db_committed"`

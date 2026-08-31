@@ -1,8 +1,7 @@
-package san
+package sanswitch
 
 import (
 	"encoding/xml"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -92,7 +91,7 @@ func TestGetDefinedZones(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	zones, err := c.GetDefinedZones()
+	zones, err := c.DefinedZones(t.Context())
 	if err != nil {
 		t.Fatalf("GetDefinedZones() error: %v", err)
 	}
@@ -144,7 +143,7 @@ func TestGetDefinedZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	zone, err := c.GetDefinedZone("qos")
+	zone, err := c.DefinedZone(t.Context(), "qos")
 	if err != nil {
 		t.Fatalf("GetDefinedZone() error: %v", err)
 	}
@@ -173,7 +172,7 @@ func TestGetDefinedZoneEscapesZoneName(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	if _, err := c.GetDefinedZone("zone/with space?"); err != nil {
+	if _, err := c.DefinedZone(t.Context(), "zone/with space?"); err != nil {
 		t.Fatalf("GetDefinedZone() error: %v", err)
 	}
 }
@@ -188,7 +187,7 @@ func TestGetEffectiveZones(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	zones, err := c.GetEffectiveZones()
+	zones, err := c.EffectiveZones(t.Context())
 	if err != nil {
 		t.Fatalf("GetEffectiveZones() error: %v", err)
 	}
@@ -218,7 +217,7 @@ func TestCreateZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.CreateZone("new_zone", []string{"10:00:00:00:c9:f8:04:35", "20:00:00:00:c9:f8:04:35"}, []string{})
+	err := c.CreateZone(t.Context(), "new_zone", []string{"10:00:00:00:c9:f8:04:35", "20:00:00:00:c9:f8:04:35"}, []string{})
 	if err != nil {
 		t.Fatalf("CreateZone() error: %v", err)
 	}
@@ -242,7 +241,7 @@ func TestCreateZoneRejectsExistingZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	if err := c.CreateZone("existing_zone", []string{"member"}, nil); err == nil {
+	if err := c.CreateZone(t.Context(), "existing_zone", []string{"member"}, nil); err == nil {
 		t.Fatal("expected CreateZone to reject existing zone")
 	}
 	if postCalled {
@@ -266,7 +265,7 @@ func TestCreateZoneWithPrincipalMembersCreatesPeerZone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
-		var payload DefinedZoneAPI
+		var payload definedZoneAPI
 		if err := xml.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
@@ -288,176 +287,12 @@ func TestCreateZoneWithPrincipalMembersCreatesPeerZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.CreateZone(
-		"peer_zone",
+	err := c.CreateZone(t.Context(), "peer_zone",
 		[]string{"10:10:10:27:f8:f0:2a:e8", "10:10:10:27:f8:f0:3a:70", "10:10:10:27:f8:f0:38:65"},
 		[]string{"10:10:10:27:f8:8f:44:cd"},
 	)
 	if err != nil {
 		t.Fatalf("CreateZone() error: %v", err)
-	}
-}
-
-func TestCreateZoneAndActivateWorkflow(t *testing.T) {
-	var calls []string
-	checksumCalls := 0
-	mux := http.NewServeMux()
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/checksum", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		checksumCalls++
-		w.Header().Set("Content-Type", "application/yang-data+xml")
-		if checksumCalls == 1 {
-			w.Write([]byte(checksumXML("old-checksum")))
-			return
-		}
-		w.Write([]byte(checksumXML("new-checksum")))
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read zone body: %v", err)
-		}
-		var payload DefinedZoneAPI
-		if err := xml.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("unmarshal zone body: %v", err)
-		}
-		if payload.Name != "zone_new" || len(payload.MemberEntryNames) != 2 {
-			t.Fatalf("unexpected zone payload: %+v", payload)
-		}
-		w.WriteHeader(http.StatusCreated)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_new", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		if r.Method != http.MethodGet {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		writeNotFound(w)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/cfg", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		switch r.Method {
-		case http.MethodGet:
-			w.Header().Set("Content-Type", "application/yang-data+xml")
-			w.Write([]byte(definedConfigXML("cfg1", "zone_existing")))
-		case http.MethodPatch:
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Fatalf("read cfg body: %v", err)
-			}
-			var payload DefinedConfigAPI
-			if err := xml.Unmarshal(body, &payload); err != nil {
-				t.Fatalf("unmarshal cfg body: %v", err)
-			}
-			if payload.Name != "cfg1" {
-				t.Fatalf("expected cfg1, got %q", payload.Name)
-			}
-			if got := strings.Join(payload.MemberZones, ","); got != "zone_existing,zone_new" {
-				t.Fatalf("expected cfg zones zone_existing,zone_new; got %s", got)
-			}
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			t.Errorf("unexpected method %s", r.Method)
-		}
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-action-v2/save", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read save body: %v", err)
-		}
-		if got := string(body); got != "<checksum>old-checksum</checksum>" {
-			t.Fatalf("unexpected save body: %s", got)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-name/cfg1", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read activate body: %v", err)
-		}
-		if got := string(body); got != "<checksum>new-checksum</checksum>" {
-			t.Fatalf("unexpected activate body: %s", got)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	ts := newMockFOS(t, mux)
-	c := newTestClient(t, ts)
-
-	err := c.CreateZoneAndActivate("cfg1", "zone_new", []string{"10:00:00:00:00:00:00:01", "10:00:00:00:00:00:00:02"}, nil)
-	if err != nil {
-		t.Fatalf("CreateZoneAndActivate() error: %v", err)
-	}
-
-	want := []string{
-		"GET /rest/running/brocade-zone/defined-configuration/cfg",
-		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_new",
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"POST /rest/running/brocade-zone/defined-configuration/zone",
-		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
-		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-action-v2/save",
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-name/cfg1",
-	}
-	if got := strings.Join(calls, "\n"); got != strings.Join(want, "\n") {
-		t.Fatalf("unexpected call order:\n%s", got)
-	}
-}
-
-func TestCreateZoneAndActivateAbortsAfterMutationFailure(t *testing.T) {
-	abortCalled := false
-	mux := http.NewServeMux()
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/cfg", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPatch {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/yang-data+xml")
-		w.Write([]byte(definedConfigXML("cfg1")))
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_new", func(w http.ResponseWriter, r *http.Request) {
-		writeNotFound(w)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/checksum", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/yang-data+xml")
-		w.Write([]byte(checksumXML("old-checksum")))
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		w.WriteHeader(http.StatusCreated)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-action-v2/transaction-abort", func(w http.ResponseWriter, r *http.Request) {
-		abortCalled = true
-		if r.Method != http.MethodPatch {
-			t.Errorf("expected PATCH, got %s", r.Method)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	ts := newMockFOS(t, mux)
-	c := newTestClient(t, ts)
-
-	err := c.CreateZoneAndActivate("cfg1", "zone_new", []string{"member"}, nil)
-	if err == nil {
-		t.Fatal("expected workflow failure")
-	}
-	var partialErr *PartialMutationError
-	if !errors.As(err, &partialErr) {
-		t.Fatalf("expected PartialMutationError, got %T: %v", err, err)
-	}
-	if !abortCalled {
-		t.Fatal("expected failed workflow to abort the pending transaction")
 	}
 }
 
@@ -484,7 +319,7 @@ func TestUpdateZone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
-		var payload DefinedZoneAPI
+		var payload definedZoneAPI
 		if err := xml.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
@@ -500,7 +335,7 @@ func TestUpdateZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.UpdateZone("zone_A", []string{"10:00:00:00:c9:f8:04:35", "new-member"}, []string{})
+	err := c.UpdateZone(t.Context(), "zone_A", []string{"10:00:00:00:c9:f8:04:35", "new-member"}, []string{})
 	if err != nil {
 		t.Fatalf("UpdateZone() error: %v", err)
 	}
@@ -529,7 +364,7 @@ func TestUpdateZoneKeepsExistingPeerZoneType(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
-		var payload DefinedZoneAPI
+		var payload definedZoneAPI
 		if err := xml.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
@@ -542,8 +377,7 @@ func TestUpdateZoneKeepsExistingPeerZoneType(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.UpdateZone(
-		"peer_zone",
+	err := c.UpdateZone(t.Context(), "peer_zone",
 		[]string{"10:10:10:27:f8:f0:2a:e8"},
 		[]string{"10:10:10:27:f8:8f:44:cd"},
 	)
@@ -576,7 +410,7 @@ func TestUpdateZoneRejectsPrincipalMembersForExistingNormalZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.UpdateZone("zone_A", []string{"member"}, []string{"principal"})
+	err := c.UpdateZone(t.Context(), "zone_A", []string{"member"}, []string{"principal"})
 	if err == nil {
 		t.Fatal("expected UpdateZone to reject principal members for existing normal zone")
 	}
@@ -599,7 +433,7 @@ func TestRenameZone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
-		var payload DefinedZoneAPI
+		var payload definedZoneAPI
 		if err := xml.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
@@ -612,83 +446,9 @@ func TestRenameZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.RenameZone("old/zone", "new zone")
+	err := c.RenameZone(t.Context(), "old/zone", "new zone")
 	if err != nil {
 		t.Fatalf("RenameZone() error: %v", err)
-	}
-}
-
-func TestReplaceZoneAndActivateWorkflow(t *testing.T) {
-	var calls []string
-	checksumCalls := 0
-	mux := http.NewServeMux()
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/checksum", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		checksumCalls++
-		w.Header().Set("Content-Type", "application/yang-data+xml")
-		if checksumCalls == 1 {
-			w.Write([]byte(checksumXML("old-checksum")))
-			return
-		}
-		w.Write([]byte(checksumXML("new-checksum")))
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		if r.Method != http.MethodPatch {
-			t.Errorf("expected PATCH, got %s", r.Method)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/cfg", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		if r.Method != http.MethodGet {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/yang-data+xml")
-		w.Write([]byte(definedConfigXML("cfg1", "zone_A")))
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_A", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		if r.Method != http.MethodGet {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/yang-data+xml")
-		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <zone>
-    <zone-name>zone_A</zone-name>
-    <zone-type-string>zone</zone-type-string>
-  </zone>
-</Response>`))
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-action-v2/save", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("/rest/running/brocade-zone/effective-configuration/cfg-name/cfg1", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	ts := newMockFOS(t, mux)
-	c := newTestClient(t, ts)
-
-	err := c.ReplaceZoneAndActivate("cfg1", "zone_A", []string{"10:00:00:00:00:00:00:01"}, nil)
-	if err != nil {
-		t.Fatalf("ReplaceZoneAndActivate() error: %v", err)
-	}
-
-	want := []string{
-		"GET /rest/running/brocade-zone/defined-configuration/cfg",
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone_A",
-		"PATCH /rest/running/brocade-zone/defined-configuration/zone",
-		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-action-v2/save",
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-name/cfg1",
-	}
-	if got := strings.Join(calls, "\n"); got != strings.Join(want, "\n") {
-		t.Fatalf("unexpected call order:\n%s", got)
 	}
 }
 
@@ -709,7 +469,7 @@ func TestDeleteZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.DeleteZone("zone_A")
+	err := c.DeleteZone(t.Context(), "zone_A")
 	if err != nil {
 		t.Fatalf("DeleteZone() error: %v", err)
 	}
@@ -733,134 +493,11 @@ func TestDeleteZoneRejectsMissingZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	if err := c.DeleteZone("missing_zone"); err == nil {
+	if err := c.DeleteZone(t.Context(), "missing_zone"); err == nil {
 		t.Fatal("expected DeleteZone to reject missing zone")
 	}
 	if deleteCalled {
 		t.Fatal("expected DeleteZone to return before DELETE")
-	}
-}
-
-func TestDeleteZoneAndActivateWorkflow(t *testing.T) {
-	var calls []string
-	var patchedConfigs []DefinedConfigAPI
-	checksumCalls := 0
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.Method+" "+r.URL.EscapedPath())
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/rest/running/brocade-zone/effective-configuration/checksum":
-			w.Header().Set("Content-Type", "application/yang-data+xml")
-			checksumCalls++
-			if checksumCalls == 1 {
-				w.Write([]byte(checksumXML("old-checksum")))
-				return
-			}
-			w.Write([]byte(checksumXML("new-checksum")))
-		case r.Method == http.MethodGet && r.URL.EscapedPath() == "/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete":
-			w.Header().Set("Content-Type", "application/yang-data+xml")
-			w.Write([]byte(`<?xml version="1.0"?><Response><zone><zone-name>zone/delete</zone-name><zone-type-string>zone</zone-type-string></zone></Response>`))
-		case r.Method == http.MethodGet && r.URL.Path == "/rest/running/brocade-zone/defined-configuration/cfg":
-			w.Header().Set("Content-Type", "application/yang-data+xml")
-			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <cfg>
-    <cfg-name>cfg1</cfg-name>
-    <member-zone>
-      <zone-name>zone_keep</zone-name>
-      <zone-name>zone/delete</zone-name>
-    </member-zone>
-  </cfg>
-  <cfg>
-    <cfg-name>cfg2</cfg-name>
-    <member-zone>
-      <zone-name>zone/delete</zone-name>
-    </member-zone>
-  </cfg>
-  <cfg>
-    <cfg-name>cfg3</cfg-name>
-    <member-zone>
-      <zone-name>zone_other</zone-name>
-    </member-zone>
-  </cfg>
-</Response>`))
-		case r.Method == http.MethodPatch && r.URL.Path == "/rest/running/brocade-zone/defined-configuration/cfg":
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Fatalf("read cfg body: %v", err)
-			}
-			var payload DefinedConfigAPI
-			if err := xml.Unmarshal(body, &payload); err != nil {
-				t.Fatalf("unmarshal cfg body: %v", err)
-			}
-			patchedConfigs = append(patchedConfigs, payload)
-			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodDelete && r.URL.EscapedPath() == "/rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete":
-			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodPatch && r.URL.Path == "/rest/running/brocade-zone/effective-configuration/cfg-action-v2/save":
-			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodPatch && r.URL.Path == "/rest/running/brocade-zone/effective-configuration/cfg-name/cfg1":
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			t.Errorf("unexpected request %s %s", r.Method, r.URL.String())
-			w.WriteHeader(http.StatusNotFound)
-		}
-	})
-
-	ts := newMockFOS(t, mux)
-	c := newTestClient(t, ts)
-
-	err := c.DeleteZoneAndActivate("cfg1", "zone/delete")
-	if err != nil {
-		t.Fatalf("DeleteZoneAndActivate() error: %v", err)
-	}
-
-	want := []string{
-		"GET /rest/running/brocade-zone/defined-configuration/cfg",
-		"GET /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
-		"PATCH /rest/running/brocade-zone/defined-configuration/cfg",
-		"DELETE /rest/running/brocade-zone/defined-configuration/zone/zone-name/zone%2Fdelete",
-		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-action-v2/save",
-		"GET /rest/running/brocade-zone/effective-configuration/checksum",
-		"PATCH /rest/running/brocade-zone/effective-configuration/cfg-name/cfg1",
-	}
-	if got := strings.Join(calls, "\n"); got != strings.Join(want, "\n") {
-		t.Fatalf("unexpected call order:\n%s", got)
-	}
-	if len(patchedConfigs) != 2 {
-		t.Fatalf("expected 2 cfg patches, got %d", len(patchedConfigs))
-	}
-	if patchedConfigs[0].Name != "cfg1" || strings.Join(patchedConfigs[0].MemberZones, ",") != "zone_keep" {
-		t.Fatalf("unexpected cfg1 patch: %+v", patchedConfigs[0])
-	}
-	if patchedConfigs[1].Name != "cfg2" || len(patchedConfigs[1].MemberZones) != 0 {
-		t.Fatalf("unexpected cfg2 patch: %+v", patchedConfigs[1])
-	}
-}
-
-func TestZoneAndActivateValidation(t *testing.T) {
-	c := NewClient("localhost", "admin", "password")
-
-	tests := []struct {
-		name string
-		err  error
-		run  func() error
-	}{
-		{name: "create requires cfg", run: func() error { return c.CreateZoneAndActivate("", "zone1", []string{"member"}, nil) }},
-		{name: "create requires zone", run: func() error { return c.CreateZoneAndActivate("cfg1", "", []string{"member"}, nil) }},
-		{name: "create requires member", run: func() error { return c.CreateZoneAndActivate("cfg1", "zone1", nil, nil) }},
-		{name: "replace requires member", run: func() error { return c.ReplaceZoneAndActivate("cfg1", "zone1", nil, nil) }},
-		{name: "delete requires zone", run: func() error { return c.DeleteZoneAndActivate("cfg1", "") }},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.run(); err == nil {
-				t.Fatal("expected validation error, got nil")
-			}
-		})
 	}
 }
 
@@ -887,7 +524,7 @@ func TestDeleteZoneEscapesZoneName(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.DeleteZone("zone/with space?")
+	err := c.DeleteZone(t.Context(), "zone/with space?")
 	if err != nil {
 		t.Fatalf("DeleteZone() error: %v", err)
 	}
@@ -912,7 +549,7 @@ func TestAbortZoneTransaction(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.AbortZoneTransaction()
+	err := c.AbortZoneTransaction(t.Context())
 	if err != nil {
 		t.Fatalf("AbortZoneTransaction() error: %v", err)
 	}
@@ -930,10 +567,10 @@ func TestAbortZoneTransactionUsesLegacyEndpointThroughFOS91(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.1.1"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.1.1"))
+	pointClientAt(t, c, ts.URL)
 
-	err := c.AbortZoneTransaction()
+	err := c.AbortZoneTransaction(t.Context())
 	if err != nil {
 		t.Fatalf("AbortZoneTransaction() error: %v", err)
 	}
@@ -955,7 +592,7 @@ func TestGetZoneTransactionStatus(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	status, err := c.GetZoneTransactionStatus()
+	status, err := c.ZoneTransactionStatus(t.Context())
 	if err != nil {
 		t.Fatalf("GetZoneTransactionStatus() error: %v", err)
 	}
@@ -980,7 +617,7 @@ func TestDeleteAliasEscapesAliasName(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.DeleteAlias("alias/with space?")
+	err := c.DeleteAlias(t.Context(), "alias/with space?")
 	if err != nil {
 		t.Fatalf("DeleteAlias() error: %v", err)
 	}
@@ -1000,7 +637,7 @@ func TestRenameAlias(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
-		var payload DefinedAliasAPI
+		var payload definedAliasAPI
 		if err := xml.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
@@ -1013,7 +650,7 @@ func TestRenameAlias(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.RenameAlias("old/alias", "new alias")
+	err := c.RenameAlias(t.Context(), "old/alias", "new alias")
 	if err != nil {
 		t.Fatalf("RenameAlias() error: %v", err)
 	}
@@ -1038,7 +675,7 @@ func TestSaveZoneConfigSendsChecksumOnly(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	if err := c.SaveZoneConfig("abc"); err != nil {
+	if err := c.SaveZoneConfig(t.Context(), "abc"); err != nil {
 		t.Fatalf("SaveZoneConfig() error: %v", err)
 	}
 }
@@ -1060,10 +697,10 @@ func TestSaveZoneConfigUsesFOS91Endpoint(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.1.1"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.1.1"))
+	pointClientAt(t, c, ts.URL)
 
-	if err := c.SaveZoneConfig("abc"); err != nil {
+	if err := c.SaveZoneConfig(t.Context(), "abc"); err != nil {
 		t.Fatalf("SaveZoneConfig() error: %v", err)
 	}
 }
@@ -1078,10 +715,10 @@ func TestSaveZoneConfigDoesNotTreatFOS910AsFOS91(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.10.0"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.10.0"))
+	pointClientAt(t, c, ts.URL)
 
-	if err := c.SaveZoneConfig("abc"); err != nil {
+	if err := c.SaveZoneConfig(t.Context(), "abc"); err != nil {
 		t.Fatalf("SaveZoneConfig() error: %v", err)
 	}
 }
@@ -1105,7 +742,7 @@ func TestActivateZoneConfigSendsChecksumOnly(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	if err := c.ActivateZoneConfig("cfg1", "abc"); err != nil {
+	if err := c.ActivateZoneConfig(t.Context(), "cfg1", "abc"); err != nil {
 		t.Fatalf("ActivateZoneConfig() error: %v", err)
 	}
 }
@@ -1126,7 +763,7 @@ func TestActivateZoneConfigEscapesConfigName(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	err := c.ActivateZoneConfig("cfg/with space?", "abc")
+	err := c.ActivateZoneConfig(t.Context(), "cfg/with space?", "abc")
 	if err != nil {
 		t.Fatalf("ActivateZoneConfig() error: %v", err)
 	}

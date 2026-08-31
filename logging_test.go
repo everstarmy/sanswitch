@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"errors"
@@ -15,13 +15,13 @@ func TestLoggingEndpointsRequireFOS90(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v8.2.3"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v8.2.3"))
+	pointClientAt(t, c, ts.URL)
 
-	if _, err := c.GetErrorLogs(); !errors.Is(err, ErrUnsupportedOperation) {
+	if _, err := c.ErrorLogs(t.Context()); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("expected ErrUnsupportedOperation for GetErrorLogs, got %v", err)
 	}
-	if _, err := c.GetAuditLogs(); !errors.Is(err, ErrUnsupportedOperation) {
+	if _, err := c.AuditLogs(t.Context()); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("expected ErrUnsupportedOperation for GetAuditLogs, got %v", err)
 	}
 	if called {
@@ -47,17 +47,17 @@ func TestLoggingEndpointsAllowFOS90(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.0.0"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.0.0"))
+	pointClientAt(t, c, ts.URL)
 
-	errorLogs, err := c.GetErrorLogs()
+	errorLogs, err := c.ErrorLogs(t.Context())
 	if err != nil {
 		t.Fatalf("GetErrorLogs() error: %v", err)
 	}
 	if len(errorLogs) != 1 {
 		t.Fatalf("expected 1 error log, got %d", len(errorLogs))
 	}
-	auditLogs, err := c.GetAuditLogs()
+	auditLogs, err := c.AuditLogs(t.Context())
 	if err != nil {
 		t.Fatalf("GetAuditLogs() error: %v", err)
 	}

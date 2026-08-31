@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 
 // ==================== SNMP System ====================
 
-// SNMPSystemResponse 对应 GET /brocade-snmp/system
-type SNMPSystemResponse struct {
-	XMLName xml.Name       `xml:"Response"`
-	System  SNMPSystemInfo `xml:"system"`
+// sNMPSystemResponse 对应 GET /brocade-snmp/system
+type sNMPSystemResponse struct {
+	XMLName xml.Name   `xml:"Response"`
+	System  SNMPSystem `xml:"system"`
 }
 
-// SNMPSystemInfo 描述 SNMP 系统级配置
-type SNMPSystemInfo struct {
+// SNMPSystem 描述 SNMP 系统级配置
+type SNMPSystem struct {
 	XMLName                xml.Name `xml:"system" json:"-"`
 	Description            string   `xml:"description" json:"description"`
 	Location               string   `xml:"location" json:"location"`
@@ -28,14 +28,14 @@ type SNMPSystemInfo struct {
 
 // ==================== SNMPv1 Account ====================
 
-// SNMPv1AccountResponse 对应 GET /brocade-snmp/v1-account
-type SNMPv1AccountResponse struct {
-	XMLName  xml.Name            `xml:"Response"`
-	Accounts []SNMPv1AccountInfo `xml:"v1-account"`
+// sNMPv1AccountResponse 对应 GET /brocade-snmp/v1-account
+type sNMPv1AccountResponse struct {
+	XMLName  xml.Name        `xml:"Response"`
+	Accounts []SNMPv1Account `xml:"v1-account"`
 }
 
-// SNMPv1AccountInfo 描述一个 SNMPv1 社区字符串账户
-type SNMPv1AccountInfo struct {
+// SNMPv1Account 描述一个 SNMPv1 社区字符串账户
+type SNMPv1Account struct {
 	XMLName        xml.Name `xml:"v1-account" json:"-"`
 	Index          uint16   `xml:"index" json:"index"`
 	CommunityName  string   `xml:"community-name" json:"-"`
@@ -44,14 +44,14 @@ type SNMPv1AccountInfo struct {
 
 // ==================== SNMPv1 Trap ====================
 
-// SNMPv1TrapResponse 对应 GET /brocade-snmp/v1-trap
-type SNMPv1TrapResponse struct {
-	XMLName xml.Name         `xml:"Response"`
-	Traps   []SNMPv1TrapInfo `xml:"v1-trap"`
+// sNMPv1TrapResponse 对应 GET /brocade-snmp/v1-trap
+type sNMPv1TrapResponse struct {
+	XMLName xml.Name     `xml:"Response"`
+	Traps   []SNMPv1Trap `xml:"v1-trap"`
 }
 
-// SNMPv1TrapInfo 描述一个 SNMPv1 Trap 接收者配置
-type SNMPv1TrapInfo struct {
+// SNMPv1Trap 描述一个 SNMPv1 Trap 接收者配置
+type SNMPv1Trap struct {
 	XMLName           xml.Name `xml:"v1-trap" json:"-"`
 	Index             uint16   `xml:"index" json:"index"`
 	Host              string   `xml:"host" json:"host"`
@@ -61,14 +61,14 @@ type SNMPv1TrapInfo struct {
 
 // ==================== SNMPv3 Account ====================
 
-// SNMPv3AccountResponse 对应 GET /brocade-snmp/v3-account
-type SNMPv3AccountResponse struct {
-	XMLName  xml.Name            `xml:"Response"`
-	Accounts []SNMPv3AccountInfo `xml:"v3-account"`
+// sNMPv3AccountResponse 对应 GET /brocade-snmp/v3-account
+type sNMPv3AccountResponse struct {
+	XMLName  xml.Name        `xml:"Response"`
+	Accounts []SNMPv3Account `xml:"v3-account"`
 }
 
-// SNMPv3AccountInfo 描述一个 SNMPv3 用户账户
-type SNMPv3AccountInfo struct {
+// SNMPv3Account 描述一个 SNMPv3 用户账户
+type SNMPv3Account struct {
 	XMLName                xml.Name `xml:"v3-account" json:"-"`
 	Index                  uint16   `xml:"index" json:"index"`
 	UserName               string   `xml:"user-name" json:"user_name"`
@@ -82,14 +82,14 @@ type SNMPv3AccountInfo struct {
 
 // ==================== SNMPv3 Trap ====================
 
-// SNMPv3TrapResponse 对应 GET /brocade-snmp/v3-trap
-type SNMPv3TrapResponse struct {
-	XMLName xml.Name         `xml:"Response"`
-	Traps   []SNMPv3TrapInfo `xml:"v3-trap"`
+// sNMPv3TrapResponse 对应 GET /brocade-snmp/v3-trap
+type sNMPv3TrapResponse struct {
+	XMLName xml.Name     `xml:"Response"`
+	Traps   []SNMPv3Trap `xml:"v3-trap"`
 }
 
-// SNMPv3TrapInfo 描述一个 SNMPv3 Trap 接收者配置
-type SNMPv3TrapInfo struct {
+// SNMPv3Trap 描述一个 SNMPv3 Trap 接收者配置
+type SNMPv3Trap struct {
 	XMLName           xml.Name `xml:"v3-trap" json:"-"`
 	TrapIndex         uint16   `xml:"trap-index" json:"trap_index"`
 	USMIndex          uint16   `xml:"usm-index" json:"usm_index"`
@@ -101,75 +101,50 @@ type SNMPv3TrapInfo struct {
 
 // ==================== Client Methods ====================
 
-// GetSNMPSystem 获取 SNMP 系统级配置
-func (c *Client) GetSNMPSystem() (*SNMPSystemInfo, error) {
-	return c.GetSNMPSystemWithContext(context.Background())
-}
-
-// GetSNMPSystemWithContext 获取 SNMP 系统级配置并允许取消请求。
-func (c *Client) GetSNMPSystemWithContext(ctx context.Context) (*SNMPSystemInfo, error) {
-	var resp SNMPSystemResponse
-	err := c.GetWithContext(ctx, c.endpoints().SNMPSystem(), &resp)
+// SNMPSystem 获取 SNMP 系统级配置并允许取消请求。
+func (c *Client) SNMPSystem(ctx context.Context) (*SNMPSystem, error) {
+	var resp sNMPSystemResponse
+	err := c.get(ctx, c.endpoints().SNMPSystem(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return &resp.System, nil
 }
 
-// GetSNMPv1Accounts 获取所有 SNMPv1 社区字符串账户
-func (c *Client) GetSNMPv1Accounts() ([]SNMPv1AccountInfo, error) {
-	return c.GetSNMPv1AccountsWithContext(context.Background())
-}
-
-// GetSNMPv1AccountsWithContext 获取 SNMPv1 社区字符串账户并允许取消请求。
-func (c *Client) GetSNMPv1AccountsWithContext(ctx context.Context) ([]SNMPv1AccountInfo, error) {
-	var resp SNMPv1AccountResponse
-	err := c.GetWithContext(ctx, c.endpoints().SNMPv1Accounts(), &resp)
+// SNMPv1Accounts 获取 SNMPv1 社区字符串账户并允许取消请求。
+func (c *Client) SNMPv1Accounts(ctx context.Context) ([]SNMPv1Account, error) {
+	var resp sNMPv1AccountResponse
+	err := c.get(ctx, c.endpoints().SNMPv1Accounts(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Accounts, nil
 }
 
-// GetSNMPv1Traps 获取所有 SNMPv1 Trap 接收者配置
-func (c *Client) GetSNMPv1Traps() ([]SNMPv1TrapInfo, error) {
-	return c.GetSNMPv1TrapsWithContext(context.Background())
-}
-
-// GetSNMPv1TrapsWithContext 获取 SNMPv1 Trap 接收者并允许取消请求。
-func (c *Client) GetSNMPv1TrapsWithContext(ctx context.Context) ([]SNMPv1TrapInfo, error) {
-	var resp SNMPv1TrapResponse
-	err := c.GetWithContext(ctx, c.endpoints().SNMPv1Traps(), &resp)
+// SNMPv1Traps 获取 SNMPv1 Trap 接收者并允许取消请求。
+func (c *Client) SNMPv1Traps(ctx context.Context) ([]SNMPv1Trap, error) {
+	var resp sNMPv1TrapResponse
+	err := c.get(ctx, c.endpoints().SNMPv1Traps(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Traps, nil
 }
 
-// GetSNMPv3Accounts 获取所有 SNMPv3 用户账户
-func (c *Client) GetSNMPv3Accounts() ([]SNMPv3AccountInfo, error) {
-	return c.GetSNMPv3AccountsWithContext(context.Background())
-}
-
-// GetSNMPv3AccountsWithContext 获取 SNMPv3 用户账户并允许取消请求。
-func (c *Client) GetSNMPv3AccountsWithContext(ctx context.Context) ([]SNMPv3AccountInfo, error) {
-	var resp SNMPv3AccountResponse
-	err := c.GetWithContext(ctx, c.endpoints().SNMPv3Accounts(), &resp)
+// SNMPv3Accounts 获取 SNMPv3 用户账户并允许取消请求。
+func (c *Client) SNMPv3Accounts(ctx context.Context) ([]SNMPv3Account, error) {
+	var resp sNMPv3AccountResponse
+	err := c.get(ctx, c.endpoints().SNMPv3Accounts(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Accounts, nil
 }
 
-// GetSNMPv3Traps 获取所有 SNMPv3 Trap 接收者配置
-func (c *Client) GetSNMPv3Traps() ([]SNMPv3TrapInfo, error) {
-	return c.GetSNMPv3TrapsWithContext(context.Background())
-}
-
-// GetSNMPv3TrapsWithContext 获取 SNMPv3 Trap 接收者并允许取消请求。
-func (c *Client) GetSNMPv3TrapsWithContext(ctx context.Context) ([]SNMPv3TrapInfo, error) {
-	var resp SNMPv3TrapResponse
-	err := c.GetWithContext(ctx, c.endpoints().SNMPv3Traps(), &resp)
+// SNMPv3Traps 获取 SNMPv3 Trap 接收者并允许取消请求。
+func (c *Client) SNMPv3Traps(ctx context.Context) ([]SNMPv3Trap, error) {
+	var resp sNMPv3TrapResponse
+	err := c.get(ctx, c.endpoints().SNMPv3Traps(), &resp)
 	if err != nil {
 		return nil, err
 	}

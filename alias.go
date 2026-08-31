@@ -1,40 +1,36 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
+	"errors"
+	"strings"
 )
 
-// DefinedAliasAPI 表示 Zone 定义配置中的 Alias（用于 XML 请求/响应序列化）
-type DefinedAliasAPI struct {
+// definedAliasAPI 表示 Zone 定义配置中的 Alias（用于 XML 请求/响应序列化）
+type definedAliasAPI struct {
 	XMLName          xml.Name `xml:"alias"`
 	Name             string   `xml:"alias-name"`
 	MemberEntryNames []string `xml:"member-entry>alias-entry-name"` // Alias 成员列表（WWN 或别名）
 }
 
-// DefinedAliasResponse 是 GET /brocade-zone/defined-configuration/alias 的 XML 响应包装
-type DefinedAliasResponse struct {
+// definedAliasResponse 是 GET /brocade-zone/defined-configuration/alias 的 XML 响应包装
+type definedAliasResponse struct {
 	XMLName xml.Name          `xml:"Response"`
-	Aliases []DefinedAliasAPI `xml:"alias"`
+	Aliases []definedAliasAPI `xml:"alias"`
 }
 
-// GetDefinedAliases 获取 Zone 定义配置中的所有 Alias 列表。
-// 对应 API: GET /brocade-zone/defined-configuration/alias
-func (c *Client) GetDefinedAliases() ([]AliasInfo, error) {
-	return c.GetDefinedAliasesWithContext(context.Background())
-}
-
-// GetDefinedAliasesWithContext 获取 Zone 定义配置中的所有 Alias 列表并允许取消请求。
-func (c *Client) GetDefinedAliasesWithContext(ctx context.Context) ([]AliasInfo, error) {
-	var resp DefinedAliasResponse
-	err := c.GetWithContext(ctx, c.endpoints().DefinedAliases(), &resp)
+// DefinedAliases 获取 Zone 定义配置中的所有 Alias 列表并允许取消请求。
+func (c *Client) DefinedAliases(ctx context.Context) ([]Alias, error) {
+	var resp definedAliasResponse
+	err := c.get(ctx, c.endpoints().DefinedAliases(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	var aliases []AliasInfo
+	var aliases []Alias
 	for _, a := range resp.Aliases {
-		aliases = append(aliases, AliasInfo{
+		aliases = append(aliases, Alias{
 			Name:    a.Name,
 			Members: a.MemberEntryNames,
 		})
@@ -43,57 +39,51 @@ func (c *Client) GetDefinedAliasesWithContext(ctx context.Context) ([]AliasInfo,
 	return aliases, nil
 }
 
-// CreateAlias 在 Zone 定义配置中创建一个新的 Alias。
-// 对应 API: POST /brocade-zone/defined-configuration/alias
-func (c *Client) CreateAlias(name string, members []string) error {
-	return c.CreateAliasWithContext(context.Background(), name, members)
-}
-
-// CreateAliasWithContext 在 Zone 定义配置中创建 Alias 并允许取消请求。
-func (c *Client) CreateAliasWithContext(ctx context.Context, name string, members []string) error {
-	payload := DefinedAliasAPI{
+// CreateAlias 在 Zone 定义配置中创建 Alias 并允许取消请求。
+func (c *Client) CreateAlias(ctx context.Context, name string, members []string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("alias name required")
+	}
+	if len(members) == 0 {
+		return errors.New("alias members required")
+	}
+	payload := definedAliasAPI{
 		Name:             name,
 		MemberEntryNames: members,
 	}
-	return c.PostWithContext(ctx, c.endpoints().DefinedAliases(), payload)
+	return c.post(ctx, c.endpoints().DefinedAliases(), payload)
 }
 
-// UpdateAlias 更新 Zone 定义配置中已有 Alias 的成员列表。
-// 对应 API: PATCH /brocade-zone/defined-configuration/alias
-func (c *Client) UpdateAlias(name string, members []string) error {
-	return c.UpdateAliasWithContext(context.Background(), name, members)
-}
-
-// UpdateAliasWithContext 更新 Alias 成员列表并允许取消请求。
-func (c *Client) UpdateAliasWithContext(ctx context.Context, name string, members []string) error {
-	payload := DefinedAliasAPI{
+// UpdateAlias 更新 Alias 成员列表并允许取消请求。
+func (c *Client) UpdateAlias(ctx context.Context, name string, members []string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("alias name required")
+	}
+	if len(members) == 0 {
+		return errors.New("alias members required")
+	}
+	payload := definedAliasAPI{
 		Name:             name,
 		MemberEntryNames: members,
 	}
-	return c.PatchWithContext(ctx, c.endpoints().DefinedAliases(), payload)
+	return c.patch(ctx, c.endpoints().DefinedAliases(), payload)
 }
 
-// RenameAlias 重命名 Zone 定义配置中的一个 Alias。
-// 对应 API: PATCH /brocade-zone/defined-configuration/alias/alias-name/{oldName}
-func (c *Client) RenameAlias(oldName, newName string) error {
-	return c.RenameAliasWithContext(context.Background(), oldName, newName)
-}
-
-// RenameAliasWithContext 重命名 Alias 并允许取消请求。
-func (c *Client) RenameAliasWithContext(ctx context.Context, oldName, newName string) error {
-	payload := DefinedAliasAPI{
+// RenameAlias 重命名 Alias 并允许取消请求。
+func (c *Client) RenameAlias(ctx context.Context, oldName, newName string) error {
+	if strings.TrimSpace(oldName) == "" || strings.TrimSpace(newName) == "" {
+		return errors.New("old and new alias names required")
+	}
+	payload := definedAliasAPI{
 		Name: newName,
 	}
-	return c.PatchWithContext(ctx, c.endpoints().DefinedAlias(oldName), payload)
+	return c.patch(ctx, c.endpoints().DefinedAlias(oldName), payload)
 }
 
-// DeleteAlias 从 Zone 定义配置中删除一个 Alias。
-// 对应 API: DELETE /brocade-zone/defined-configuration/alias/alias-name/{name}
-func (c *Client) DeleteAlias(name string) error {
-	return c.DeleteAliasWithContext(context.Background(), name)
-}
-
-// DeleteAliasWithContext 删除 Alias 并允许取消请求。
-func (c *Client) DeleteAliasWithContext(ctx context.Context, name string) error {
-	return c.DeleteWithContext(ctx, c.endpoints().DefinedAlias(name))
+// DeleteAlias 删除 Alias 并允许取消请求。
+func (c *Client) DeleteAlias(ctx context.Context, name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("alias name required")
+	}
+	return c.delete(ctx, c.endpoints().DefinedAlias(name))
 }

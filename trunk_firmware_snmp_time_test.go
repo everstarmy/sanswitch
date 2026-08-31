@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"errors"
@@ -40,10 +40,10 @@ func TestGetTrunks(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.1.0"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.1.0"))
+	pointClientAt(t, c, ts.URL)
 
-	trunks, err := c.GetTrunks()
+	trunks, err := c.Trunks(t.Context())
 	if err != nil {
 		t.Fatalf("GetTrunks failed: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestGetTrunkPerformances(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	perfs, err := c.GetTrunkPerformances()
+	perfs, err := c.TrunkPerformances(t.Context())
 	if err != nil {
 		t.Fatalf("GetTrunkPerformances failed: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestGetTrunkAreas(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	areas, err := c.GetTrunkAreas()
+	areas, err := c.TrunkAreas(t.Context())
 	if err != nil {
 		t.Fatalf("GetTrunkAreas failed: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestGetFirmwareHistory(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	history, err := c.GetFirmwareHistory()
+	history, err := c.FirmwareHistory(t.Context())
 	if err != nil {
 		t.Fatalf("GetFirmwareHistory failed: %v", err)
 	}
@@ -242,10 +242,10 @@ func TestGetFirmwareHistoryRequiresFOS91(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.0.2"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.0.2"))
+	pointClientAt(t, c, ts.URL)
 
-	if _, err := c.GetFirmwareHistory(); !errors.Is(err, ErrUnsupportedOperation) {
+	if _, err := c.FirmwareHistory(t.Context()); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("expected ErrUnsupportedOperation, got %v", err)
 	}
 	if called {
@@ -277,7 +277,7 @@ func TestGetSNMPSystem(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	sys, err := c.GetSNMPSystem()
+	sys, err := c.SNMPSystem(t.Context())
 	if err != nil {
 		t.Fatalf("GetSNMPSystem failed: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestGetSNMPv1Accounts(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	accounts, err := c.GetSNMPv1Accounts()
+	accounts, err := c.SNMPv1Accounts(t.Context())
 	if err != nil {
 		t.Fatalf("GetSNMPv1Accounts failed: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestGetSNMPv1Traps(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	traps, err := c.GetSNMPv1Traps()
+	traps, err := c.SNMPv1Traps(t.Context())
 	if err != nil {
 		t.Fatalf("GetSNMPv1Traps failed: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestGetSNMPv3Accounts(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	accounts, err := c.GetSNMPv3Accounts()
+	accounts, err := c.SNMPv3Accounts(t.Context())
 	if err != nil {
 		t.Fatalf("GetSNMPv3Accounts failed: %v", err)
 	}
@@ -451,7 +451,7 @@ func TestGetSNMPv3Traps(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	traps, err := c.GetSNMPv3Traps()
+	traps, err := c.SNMPv3Traps(t.Context())
 	if err != nil {
 		t.Fatalf("GetSNMPv3Traps failed: %v", err)
 	}
@@ -497,7 +497,7 @@ func TestGetTimeZone(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	tz, err := c.GetTimeZone()
+	tz, err := c.TimeZone(t.Context())
 	if err != nil {
 		t.Fatalf("GetTimeZone failed: %v", err)
 	}
@@ -533,7 +533,7 @@ func TestGetClockServer(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	cs, err := c.GetClockServer()
+	cs, err := c.ClockServer(t.Context())
 	if err != nil {
 		t.Fatalf("GetClockServer failed: %v", err)
 	}

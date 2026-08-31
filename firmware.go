@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 
 // ==================== Firmware History ====================
 
-// FirmwareHistoryResponse 对应 GET /brocade-firmware/firmware-history
-type FirmwareHistoryResponse struct {
-	XMLName         xml.Name              `xml:"Response"`
-	FirmwareHistory []FirmwareHistoryInfo `xml:"firmware-history"`
+// firmwareHistoryResponse 对应 GET /brocade-firmware/firmware-history
+type firmwareHistoryResponse struct {
+	XMLName         xml.Name          `xml:"Response"`
+	FirmwareHistory []FirmwareHistory `xml:"firmware-history"`
 }
 
-// FirmwareHistoryInfo 描述一条固件安装历史记录
-type FirmwareHistoryInfo struct {
+// FirmwareHistory 描述一条固件安装历史记录
+type FirmwareHistory struct {
 	XMLName         xml.Name `xml:"firmware-history" json:"-"`
 	SequenceNumber  uint16   `xml:"sequence-number" json:"sequence_number"`
 	TimeStamp       string   `xml:"time-stamp" json:"time_stamp"`
@@ -27,18 +27,13 @@ type FirmwareHistoryInfo struct {
 
 // ==================== Client Methods ====================
 
-// GetFirmwareHistory 获取固件版本安装历史
-func (c *Client) GetFirmwareHistory() ([]FirmwareHistoryInfo, error) {
-	return c.GetFirmwareHistoryWithContext(context.Background())
-}
-
-// GetFirmwareHistoryWithContext 获取固件版本安装历史并允许取消请求。
-func (c *Client) GetFirmwareHistoryWithContext(ctx context.Context) ([]FirmwareHistoryInfo, error) {
+// FirmwareHistory 获取固件版本安装历史并允许取消请求。
+func (c *Client) FirmwareHistory(ctx context.Context) ([]FirmwareHistory, error) {
 	if err := c.ensureFirmwareHistorySupported(); err != nil {
 		return nil, err
 	}
-	var resp FirmwareHistoryResponse
-	err := c.GetWithContext(ctx, c.endpoints().FirmwareHistory(), &resp)
+	var resp firmwareHistoryResponse
+	err := c.get(ctx, c.endpoints().FirmwareHistory(), &resp)
 	if err != nil {
 		return nil, err
 	}

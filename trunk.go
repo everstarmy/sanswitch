@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 
 // ==================== Trunk Members ====================
 
-// TrunkResponse 对应 GET /brocade-fibrechannel-trunk/trunk
-type TrunkResponse struct {
-	XMLName xml.Name    `xml:"Response"`
-	Trunks  []TrunkInfo `xml:"trunk"`
+// trunkResponse 对应 GET /brocade-fibrechannel-trunk/trunk
+type trunkResponse struct {
+	XMLName xml.Name `xml:"Response"`
+	Trunks  []Trunk  `xml:"trunk"`
 }
 
-// TrunkInfo 描述一条 ISL Trunk 链路的成员信息
-type TrunkInfo struct {
+// Trunk 描述一条 ISL Trunk 链路的成员信息
+type Trunk struct {
 	XMLName            xml.Name `xml:"trunk" json:"-"`
 	Group              uint32   `xml:"group" json:"group"`
 	SourcePort         uint32   `xml:"source-port" json:"source_port"`
@@ -29,14 +29,14 @@ type TrunkInfo struct {
 
 // ==================== Trunk Performance ====================
 
-// TrunkPerformanceResponse 对应 GET /brocade-fibrechannel-trunk/performance
-type TrunkPerformanceResponse struct {
-	XMLName      xml.Name               `xml:"Response"`
-	Performances []TrunkPerformanceInfo `xml:"performance"`
+// trunkPerformanceResponse 对应 GET /brocade-fibrechannel-trunk/performance
+type trunkPerformanceResponse struct {
+	XMLName      xml.Name           `xml:"Response"`
+	Performances []TrunkPerformance `xml:"performance"`
 }
 
-// TrunkPerformanceInfo 描述一条 Trunk 的性能统计
-type TrunkPerformanceInfo struct {
+// TrunkPerformance 描述一条 Trunk 的性能统计
+type TrunkPerformance struct {
 	XMLName         xml.Name `xml:"performance" json:"-"`
 	Group           uint32   `xml:"group" json:"group"`
 	TxBandwidth     uint32   `xml:"tx-bandwidth" json:"tx_bandwidth"`
@@ -58,14 +58,14 @@ type TrunkPerformanceInfo struct {
 
 // ==================== Trunk Area ====================
 
-// TrunkAreaResponse 对应 GET /brocade-fibrechannel-trunk/trunk-area
-type TrunkAreaResponse struct {
-	XMLName    xml.Name        `xml:"Response"`
-	TrunkAreas []TrunkAreaInfo `xml:"trunk-area"`
+// trunkAreaResponse 对应 GET /brocade-fibrechannel-trunk/trunk-area
+type trunkAreaResponse struct {
+	XMLName    xml.Name    `xml:"Response"`
+	TrunkAreas []TrunkArea `xml:"trunk-area"`
 }
 
-// TrunkAreaInfo 描述一个 Trunk Area 组
-type TrunkAreaInfo struct {
+// TrunkArea 描述一个 Trunk Area 组
+type TrunkArea struct {
 	XMLName      xml.Name `xml:"trunk-area" json:"-"`
 	TrunkIndex   uint32   `xml:"trunk-index" json:"trunk_index"`
 	MasterPort   string   `xml:"master-port" json:"master_port"`
@@ -75,45 +75,30 @@ type TrunkAreaInfo struct {
 
 // ==================== Client Methods ====================
 
-// GetTrunks 获取交换机上所有 Trunk 成员列表
-func (c *Client) GetTrunks() ([]TrunkInfo, error) {
-	return c.GetTrunksWithContext(context.Background())
-}
-
-// GetTrunksWithContext 获取交换机上所有 Trunk 成员并允许取消请求。
-func (c *Client) GetTrunksWithContext(ctx context.Context) ([]TrunkInfo, error) {
-	var resp TrunkResponse
-	err := c.GetWithContext(ctx, c.endpoints().Trunks(), &resp)
+// Trunks 获取交换机上所有 Trunk 成员并允许取消请求。
+func (c *Client) Trunks(ctx context.Context) ([]Trunk, error) {
+	var resp trunkResponse
+	err := c.get(ctx, c.endpoints().Trunks(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Trunks, nil
 }
 
-// GetTrunkPerformances 获取所有 Trunk 的性能统计
-func (c *Client) GetTrunkPerformances() ([]TrunkPerformanceInfo, error) {
-	return c.GetTrunkPerformancesWithContext(context.Background())
-}
-
-// GetTrunkPerformancesWithContext 获取 Trunk 性能统计并允许取消请求。
-func (c *Client) GetTrunkPerformancesWithContext(ctx context.Context) ([]TrunkPerformanceInfo, error) {
-	var resp TrunkPerformanceResponse
-	err := c.GetWithContext(ctx, c.endpoints().TrunkPerformances(), &resp)
+// TrunkPerformances 获取 Trunk 性能统计并允许取消请求。
+func (c *Client) TrunkPerformances(ctx context.Context) ([]TrunkPerformance, error) {
+	var resp trunkPerformanceResponse
+	err := c.get(ctx, c.endpoints().TrunkPerformances(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Performances, nil
 }
 
-// GetTrunkAreas 获取所有 Trunk Area 组信息
-func (c *Client) GetTrunkAreas() ([]TrunkAreaInfo, error) {
-	return c.GetTrunkAreasWithContext(context.Background())
-}
-
-// GetTrunkAreasWithContext 获取 Trunk Area 信息并允许取消请求。
-func (c *Client) GetTrunkAreasWithContext(ctx context.Context) ([]TrunkAreaInfo, error) {
-	var resp TrunkAreaResponse
-	err := c.GetWithContext(ctx, c.endpoints().TrunkAreas(), &resp)
+// TrunkAreas 获取 Trunk Area 信息并允许取消请求。
+func (c *Client) TrunkAreas(ctx context.Context) ([]TrunkArea, error) {
+	var resp trunkAreaResponse
+	err := c.get(ctx, c.endpoints().TrunkAreas(), &resp)
 	if err != nil {
 		return nil, err
 	}

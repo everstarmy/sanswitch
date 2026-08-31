@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"net/http"
@@ -54,7 +54,7 @@ func TestGetPorts(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	ports, err := c.GetPorts()
+	ports, err := c.Ports(t.Context())
 	if err != nil {
 		t.Fatalf("GetPorts() error: %v", err)
 	}

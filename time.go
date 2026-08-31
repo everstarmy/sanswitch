@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 
 // ==================== Time Zone ====================
 
-// TimeZoneResponse 对应 GET /brocade-time/time-zone
-type TimeZoneResponse struct {
-	XMLName  xml.Name     `xml:"Response"`
-	TimeZone TimeZoneInfo `xml:"time-zone"`
+// timeZoneResponse 对应 GET /brocade-time/time-zone
+type timeZoneResponse struct {
+	XMLName  xml.Name `xml:"Response"`
+	TimeZone TimeZone `xml:"time-zone"`
 }
 
-// TimeZoneInfo 描述交换机时区配置
-type TimeZoneInfo struct {
+// TimeZone 描述交换机时区配置
+type TimeZone struct {
 	XMLName          xml.Name `xml:"time-zone" json:"-"`
 	Name             string   `xml:"name" json:"name"`
 	GMTOffsetHours   int16    `xml:"gmt-offset-hours" json:"gmt_offset_hours"`
@@ -23,14 +23,14 @@ type TimeZoneInfo struct {
 
 // ==================== Clock Server (NTP) ====================
 
-// ClockServerResponse 对应 GET /brocade-time/clock-server
-type ClockServerResponse struct {
-	XMLName     xml.Name        `xml:"Response"`
-	ClockServer ClockServerInfo `xml:"clock-server"`
+// clockServerResponse 对应 GET /brocade-time/clock-server
+type clockServerResponse struct {
+	XMLName     xml.Name    `xml:"Response"`
+	ClockServer ClockServer `xml:"clock-server"`
 }
 
-// ClockServerInfo 描述交换机 NTP 时钟服务器配置
-type ClockServerInfo struct {
+// ClockServer 描述交换机 NTP 时钟服务器配置
+type ClockServer struct {
 	XMLName            xml.Name `xml:"clock-server" json:"-"`
 	NTPServerAddresses []string `xml:"ntp-server-address>server-address" json:"ntp_server_addresses"`
 	ActiveServer       string   `xml:"active-server" json:"active_server"`
@@ -40,30 +40,20 @@ type ClockServerInfo struct {
 
 // ==================== Client Methods ====================
 
-// GetTimeZone 获取交换机时区配置
-func (c *Client) GetTimeZone() (*TimeZoneInfo, error) {
-	return c.GetTimeZoneWithContext(context.Background())
-}
-
-// GetTimeZoneWithContext 获取交换机时区配置并允许取消请求。
-func (c *Client) GetTimeZoneWithContext(ctx context.Context) (*TimeZoneInfo, error) {
-	var resp TimeZoneResponse
-	err := c.GetWithContext(ctx, c.endpoints().TimeZone(), &resp)
+// TimeZone 获取交换机时区配置并允许取消请求。
+func (c *Client) TimeZone(ctx context.Context) (*TimeZone, error) {
+	var resp timeZoneResponse
+	err := c.get(ctx, c.endpoints().TimeZone(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return &resp.TimeZone, nil
 }
 
-// GetClockServer 获取交换机 NTP 时钟服务器配置
-func (c *Client) GetClockServer() (*ClockServerInfo, error) {
-	return c.GetClockServerWithContext(context.Background())
-}
-
-// GetClockServerWithContext 获取交换机 NTP 时钟服务器配置并允许取消请求。
-func (c *Client) GetClockServerWithContext(ctx context.Context) (*ClockServerInfo, error) {
-	var resp ClockServerResponse
-	err := c.GetWithContext(ctx, c.endpoints().ClockServer(), &resp)
+// ClockServer 获取交换机 NTP 时钟服务器配置并允许取消请求。
+func (c *Client) ClockServer(ctx context.Context) (*ClockServer, error) {
+	var resp clockServerResponse
+	err := c.get(ctx, c.endpoints().ClockServer(), &resp)
 	if err != nil {
 		return nil, err
 	}

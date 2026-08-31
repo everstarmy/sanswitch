@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -8,16 +8,16 @@ import (
 
 // ==================== Error Log (RAS Log) ====================
 
-// ErrorLogResponse 是 GET /brocade-logging/error-log 的 XML 响应包装
-type ErrorLogResponse struct {
-	XMLName   xml.Name       `xml:"Response"`
-	ErrorLogs []ErrorLogInfo `xml:"error-log"`
+// errorLogResponse 是 GET /brocade-logging/error-log 的 XML 响应包装
+type errorLogResponse struct {
+	XMLName   xml.Name   `xml:"Response"`
+	ErrorLogs []ErrorLog `xml:"error-log"`
 }
 
-// ErrorLogInfo 描述一条 RAS 错误日志记录，包含序列号、时间戳、消息 ID、
+// ErrorLog 描述一条 RAS 错误日志记录，包含序列号、时间戳、消息 ID、
 // 严重级别、Fabric ID、插槽 ID、消息文本等字段。
 // 对应 YANG 模型: brocade-logging/error-log
-type ErrorLogInfo struct {
+type ErrorLog struct {
 	XMLName                xml.Name `xml:"error-log" json:"-"`
 	SequenceNumber         uint32   `xml:"sequence-number" json:"sequence_number"`
 	TimeStamp              string   `xml:"time-stamp" json:"time_stamp"`
@@ -31,20 +31,14 @@ type ErrorLogInfo struct {
 	EventInfo              string   `xml:"event-info" json:"event_info"`
 }
 
-// GetErrorLogs 获取交换机上的所有 RAS 错误日志记录。
-// 对应 API: GET /brocade-logging/error-log
-func (c *Client) GetErrorLogs() ([]ErrorLogInfo, error) {
-	return c.GetErrorLogsWithContext(context.Background())
-}
-
-// GetErrorLogsWithContext 获取 RAS 错误日志并允许取消请求。
-func (c *Client) GetErrorLogsWithContext(ctx context.Context) ([]ErrorLogInfo, error) {
+// ErrorLogs 获取 RAS 错误日志并允许取消请求。
+func (c *Client) ErrorLogs(ctx context.Context) ([]ErrorLog, error) {
 	if err := c.ensureLoggingSupported("error-log"); err != nil {
 		return nil, err
 	}
 
-	var resp ErrorLogResponse
-	err := c.GetWithContext(ctx, c.endpoints().ErrorLogs(), &resp)
+	var resp errorLogResponse
+	err := c.get(ctx, c.endpoints().ErrorLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -53,16 +47,16 @@ func (c *Client) GetErrorLogsWithContext(ctx context.Context) ([]ErrorLogInfo, e
 
 // ==================== Audit Log ====================
 
-// AuditLogResponse 是 GET /brocade-logging/audit-log 的 XML 响应包装
-type AuditLogResponse struct {
-	XMLName   xml.Name       `xml:"Response"`
-	AuditLogs []AuditLogInfo `xml:"audit-log"`
+// auditLogResponse 是 GET /brocade-logging/audit-log 的 XML 响应包装
+type auditLogResponse struct {
+	XMLName   xml.Name   `xml:"Response"`
+	AuditLogs []AuditLog `xml:"audit-log"`
 }
 
-// AuditLogInfo 描述一条审计日志记录，包含序列号、时间戳、消息 ID、
+// AuditLog 描述一条审计日志记录，包含序列号、时间戳、消息 ID、
 // 严重级别、事件类别、操作用户、IP 地址、角色、接口等字段。
 // 对应 YANG 模型: brocade-logging/audit-log
-type AuditLogInfo struct {
+type AuditLog struct {
 	XMLName                xml.Name `xml:"audit-log" json:"-"`
 	SequenceNumber         uint32   `xml:"sequence-number" json:"sequence_number"`
 	TimeStamp              string   `xml:"time-stamp" json:"time_stamp"`
@@ -81,20 +75,14 @@ type AuditLogInfo struct {
 	ApplicationUserName    string   `xml:"application-user-name" json:"application_user_name"`
 }
 
-// GetAuditLogs 获取交换机上的所有审计日志记录。
-// 对应 API: GET /brocade-logging/audit-log
-func (c *Client) GetAuditLogs() ([]AuditLogInfo, error) {
-	return c.GetAuditLogsWithContext(context.Background())
-}
-
-// GetAuditLogsWithContext 获取审计日志并允许取消请求。
-func (c *Client) GetAuditLogsWithContext(ctx context.Context) ([]AuditLogInfo, error) {
+// AuditLogs 获取审计日志并允许取消请求。
+func (c *Client) AuditLogs(ctx context.Context) ([]AuditLog, error) {
 	if err := c.ensureLoggingSupported("audit-log"); err != nil {
 		return nil, err
 	}
 
-	var resp AuditLogResponse
-	err := c.GetWithContext(ctx, c.endpoints().AuditLogs(), &resp)
+	var resp auditLogResponse
+	err := c.get(ctx, c.endpoints().AuditLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}

@@ -1,23 +1,12 @@
-package san
+package sanswitch
 
 import (
-	"fmt"
 	"net/url"
-	"strconv"
-	"strings"
 )
 
-const legacyFOSVersion = "v8.2"
-
 type endpoints struct {
-	version                   fosMajorMinor
+	version                   Version
 	allowUnknownVersionWrites bool
-}
-
-type fosMajorMinor struct {
-	major int
-	minor int
-	known bool
 }
 
 func (c *Client) endpoints() endpoints {
@@ -26,19 +15,16 @@ func (c *Client) endpoints() endpoints {
 	allowUnknownVersionWrites := c.allowUnknownFOSVersionWrites
 	c.stateMu.RUnlock()
 	return endpoints{
-		version:                   parseFOSMajorMinor(version),
+		version:                   version,
 		allowUnknownVersionWrites: allowUnknownVersionWrites,
 	}
 }
 
 func (e endpoints) allowWrite() bool {
-	if !e.version.known {
+	if !e.version.Valid() {
 		return e.allowUnknownVersionWrites
 	}
-	if e.version.major > 9 {
-		return true
-	}
-	return e.version.major == 9 && e.version.minor >= 1
+	return e.version.AtLeast(9, 1)
 }
 
 func (e endpoints) allowFRUHistoryLogSensor() bool {
@@ -50,24 +36,21 @@ func (e endpoints) allowLogging() bool {
 }
 
 func (e endpoints) allowFOS90Endpoint() bool {
-	if !e.version.known {
+	if !e.version.Valid() {
 		return true
 	}
-	return e.version.major >= 9
+	return e.version.AtLeast(9, 0)
 }
 
 func (e endpoints) allowFirmwareHistory() bool {
-	if !e.version.known {
+	if !e.version.Valid() {
 		return true
 	}
-	if e.version.major > 9 {
-		return true
-	}
-	return e.version.major == 9 && e.version.minor >= 1
+	return e.version.AtLeast(9, 1)
 }
 
 func (e endpoints) ZoneSaveConfig() string {
-	if e.version.known && e.version.major == 9 && e.version.minor == 1 {
+	if e.version.Valid() && e.version.Major == 9 && e.version.Minor == 1 {
 		return "/brocade-zone/effective-configuration/cfg-action/1"
 	}
 	return "/brocade-zone/effective-configuration/cfg-action-v2/save"
@@ -118,7 +101,7 @@ func (endpoints) ZoneActivateConfig(name string) string {
 }
 
 func (e endpoints) ZoneAbortTransaction() string {
-	if e.version.known && (e.version.major < 9 || e.version.major == 9 && e.version.minor <= 1) {
+	if e.version.Valid() && !e.version.AtLeast(9, 2) {
 		return "/brocade-zone/effective-configuration/cfg-action/4"
 	}
 	return "/brocade-zone/effective-configuration/cfg-action-v2/transaction-abort"
@@ -242,41 +225,4 @@ func (endpoints) FDMIPorts() string {
 
 func (endpoints) FirmwareHistory() string {
 	return "/brocade-firmware/firmware-history"
-}
-
-func parseFOSMajorMinor(version string) fosMajorMinor {
-	normalized := strings.TrimSpace(strings.ToLower(version))
-	normalized = strings.TrimPrefix(normalized, "v")
-	if normalized == "" {
-		return fosMajorMinor{}
-	}
-	parts := strings.Split(normalized, ".")
-	if len(parts) < 2 {
-		return fosMajorMinor{}
-	}
-	major, err := strconv.Atoi(leadingDigits(parts[0]))
-	if err != nil {
-		return fosMajorMinor{}
-	}
-	minor, err := strconv.Atoi(leadingDigits(parts[1]))
-	if err != nil {
-		return fosMajorMinor{}
-	}
-	return fosMajorMinor{major: major, minor: minor, known: true}
-}
-
-func leadingDigits(value string) string {
-	for i, r := range value {
-		if r < '0' || r > '9' {
-			return value[:i]
-		}
-	}
-	return value
-}
-
-func (v fosMajorMinor) String() string {
-	if !v.known {
-		return "unknown"
-	}
-	return fmt.Sprintf("v%d.%d", v.major, v.minor)
 }

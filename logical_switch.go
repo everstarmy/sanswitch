@@ -1,20 +1,20 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
 )
 
-// LogicalSwitchResponse 是 GET /brocade-fibrechannel-logical-switch/fibrechannel-logical-switch 的 XML 响应包装
-type LogicalSwitchResponse struct {
-	XMLName         xml.Name            `xml:"Response"`
-	LogicalSwitches []LogicalSwitchInfo `xml:"fibrechannel-logical-switch"`
+// logicalSwitchResponse 是 GET /brocade-fibrechannel-logical-switch/fibrechannel-logical-switch 的 XML 响应包装
+type logicalSwitchResponse struct {
+	XMLName         xml.Name        `xml:"Response"`
+	LogicalSwitches []LogicalSwitch `xml:"fibrechannel-logical-switch"`
 }
 
-// LogicalSwitchInfo 描述一个逻辑交换机的配置信息，包含 Fabric ID、WWN、
+// LogicalSwitch 描述一个逻辑交换机的配置信息，包含 Fabric ID、WWN、
 // 基础交换机标志、FICON 模式、端口成员列表等字段。
 // 对应 YANG 模型: brocade-fibrechannel-logical-switch/fibrechannel-logical-switch
-type LogicalSwitchInfo struct {
+type LogicalSwitch struct {
 	XMLName                xml.Name `xml:"fibrechannel-logical-switch" json:"-"`
 	FabricID               uint32   `xml:"fabric-id" json:"fabric_id"`                                 // Fabric ID
 	SwitchWWN              string   `xml:"switch-wwn" json:"switch_wwn"`                               // 交换机 WWN
@@ -28,16 +28,10 @@ type LogicalSwitchInfo struct {
 	PortIndexMembers       []uint32 `xml:"port-index-members>port-index" json:"port_index_members"`    // 端口索引成员列表
 }
 
-// GetLogicalSwitches 获取交换机上所有逻辑交换机的配置信息。
-// 对应 API: GET /brocade-fibrechannel-logical-switch/fibrechannel-logical-switch
-func (c *Client) GetLogicalSwitches() ([]LogicalSwitchInfo, error) {
-	return c.GetLogicalSwitchesWithContext(context.Background())
-}
-
-// GetLogicalSwitchesWithContext 获取交换机上所有逻辑交换机并允许取消请求。
-func (c *Client) GetLogicalSwitchesWithContext(ctx context.Context) ([]LogicalSwitchInfo, error) {
-	var resp LogicalSwitchResponse
-	err := c.GetWithContext(ctx, c.endpoints().LogicalSwitches(), &resp)
+// LogicalSwitches 获取交换机上所有逻辑交换机并允许取消请求。
+func (c *Client) LogicalSwitches(ctx context.Context) ([]LogicalSwitch, error) {
+	var resp logicalSwitchResponse
+	err := c.get(ctx, c.endpoints().LogicalSwitches(), &resp)
 	if err != nil {
 		return nil, err
 	}

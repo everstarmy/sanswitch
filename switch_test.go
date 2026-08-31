@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"net/http"
@@ -35,7 +35,7 @@ func TestGetFabricSwitches(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	switches, err := c.GetFabricSwitches()
+	switches, err := c.FabricSwitches(t.Context())
 	if err != nil {
 		t.Fatalf("GetFabricSwitches() error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestGetSwitchInfo(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	info, err := c.GetSwitchInfo()
+	info, err := c.Switch(t.Context())
 	if err != nil {
 		t.Fatalf("GetSwitchInfo() error: %v", err)
 	}
@@ -137,9 +137,9 @@ func TestGetSwitchInfoSelectsSwitchMatchingClientHost(t *testing.T) {
 
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
-	c.host = "192.168.1.100"
+	c.switchAddress = "192.168.1.100"
 
-	info, err := c.GetSwitchInfo()
+	info, err := c.Switch(t.Context())
 	if err != nil {
 		t.Fatalf("GetSwitchInfo() error: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestGetSwitchInfoNotFound(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	_, err := c.GetSwitchInfo()
+	_, err := c.Switch(t.Context())
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}

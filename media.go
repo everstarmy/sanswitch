@@ -1,21 +1,21 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
 )
 
-// MediaRDPResponse 是 GET /brocade-media/media-rdp 的 XML 响应包装
-type MediaRDPResponse struct {
-	XMLName   xml.Name       `xml:"Response"`
-	MediaRDPs []MediaRDPInfo `xml:"media-rdp"`
+// mediaRDPResponse 是 GET /brocade-media/media-rdp 的 XML 响应包装
+type mediaRDPResponse struct {
+	XMLName   xml.Name   `xml:"Response"`
+	MediaRDPs []MediaRDP `xml:"media-rdp"`
 }
 
-// MediaRDPInfo 描述一个 SFP/XFP 光模块的完整诊断信息（RDP = Raw Diagnostic Parameters），
+// MediaRDP 描述一个 SFP/XFP 光模块的完整诊断信息（RDP = Raw Diagnostic Parameters），
 // 包含模块标识、速率能力、光纤类型、光功率、温度、电流、电压、
 // 远端模块信息及各类告警标志等 100+ 个字段。
 // 对应 YANG 模型: brocade-media/media-rdp
-type MediaRDPInfo struct {
+type MediaRDP struct {
 	XMLName                        xml.Name `xml:"media-rdp" json:"-"`
 	Name                           string   `xml:"name" json:"name"`
 	Identifier                     string   `xml:"identifier" json:"identifier"`
@@ -123,16 +123,10 @@ type MediaRDPInfo struct {
 	RemoteMediaRXPowerAlarmTypeLW  string   `xml:"remote-media-rx-power-alarm-type>low-warning" json:"remote_media_rx_power_alarm_type_low_warning"`
 }
 
-// GetMediaRDPs 获取交换机上所有 SFP/XFP 光模块的原始诊断参数信息。
-// 对应 API: GET /brocade-media/media-rdp
-func (c *Client) GetMediaRDPs() ([]MediaRDPInfo, error) {
-	return c.GetMediaRDPsWithContext(context.Background())
-}
-
-// GetMediaRDPsWithContext 获取 SFP/XFP 诊断信息并允许取消请求。
-func (c *Client) GetMediaRDPsWithContext(ctx context.Context) ([]MediaRDPInfo, error) {
-	var resp MediaRDPResponse
-	err := c.GetWithContext(ctx, c.endpoints().MediaRDPs(), &resp)
+// MediaRDPs 获取 SFP/XFP 诊断信息并允许取消请求。
+func (c *Client) MediaRDPs(ctx context.Context) ([]MediaRDP, error) {
+	var resp mediaRDPResponse
+	err := c.get(ctx, c.endpoints().MediaRDPs(), &resp)
 	if err != nil {
 		return nil, err
 	}

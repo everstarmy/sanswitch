@@ -1,18 +1,18 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
 )
 
-// FibreChannelResponse 是 GET /brocade-interface/fibrechannel 的 XML 响应包装
-type FibreChannelResponse struct {
-	XMLName xml.Name   `xml:"Response"`
-	Ports   []PortInfo `xml:"fibrechannel"`
+// fibreChannelResponse 是 GET /brocade-interface/fibrechannel 的 XML 响应包装
+type fibreChannelResponse struct {
+	XMLName xml.Name `xml:"Response"`
+	Ports   []Port   `xml:"fibrechannel"`
 }
 
-// PortInfo 描述一个 FC 端口的完整状态，包含运行状态、速率、WWN、邻居、缓冲区、协议能力等字段
-type PortInfo struct {
+// Port 描述一个 FC 端口的完整状态，包含运行状态、速率、WWN、邻居、缓冲区、协议能力等字段
+type Port struct {
 	XMLName                             xml.Name `xml:"fibrechannel" json:"-"`
 	Name                                string   `xml:"name" json:"name"`
 	WWN                                 string   `xml:"wwn" json:"wwn"`
@@ -118,16 +118,10 @@ type PortInfo struct {
 	PortSCN                             string   `xml:"port-scn" json:"port_scn"`
 }
 
-// GetPorts 获取交换机上所有 FC 端口的详细信息
-// 对应 API: GET /brocade-interface/fibrechannel
-func (c *Client) GetPorts() ([]PortInfo, error) {
-	return c.GetPortsWithContext(context.Background())
-}
-
-// GetPortsWithContext 获取交换机上所有 FC 端口并允许取消请求。
-func (c *Client) GetPortsWithContext(ctx context.Context) ([]PortInfo, error) {
-	var resp FibreChannelResponse
-	err := c.GetWithContext(ctx, c.endpoints().FibreChannelPorts(), &resp)
+// Ports 获取交换机上所有 FC 端口并允许取消请求。
+func (c *Client) Ports(ctx context.Context) ([]Port, error) {
+	var resp fibreChannelResponse
+	err := c.get(ctx, c.endpoints().FibreChannelPorts(), &resp)
 	if err != nil {
 		return nil, err
 	}

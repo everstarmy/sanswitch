@@ -3,7 +3,35 @@
 All notable changes to this module are recorded here. The project follows
 Semantic Versioning.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-31
+
+### Breaking changes
+
+- Raised the minimum Go version to 1.24 and renamed the package to
+  `sanswitch`.
+- Removed `SANSwitch`, producer-owned capability interfaces, context-free
+  network methods, and all `WithContext` method suffixes.
+- Replaced `NewClient` with validating `New` and authenticated `Open`.
+- `Login` now accepts short-lived `Credentials`; clients no longer retain
+  usernames or passwords.
+- Renamed public models and read methods to concise Go names such as `Port`,
+  `Zone`, `Ports`, and `DefinedZones`.
+- Replaced composite Zone-and-activate helpers with explicit
+  `ZoneTransaction` operations and `Commit`/`Abort`.
+
+### Added
+
+- Typed `Version` and `Capabilities` APIs.
+- `WithTransport` for proxy, tracing, and deterministic testing integration.
+- Retry jitter and transient failure classification.
+- Contract, fuzz, concurrent session, transaction, and constructor validation
+  tests.
+
+### Maintenance
+
+- XML/YANG wire types are private implementation details.
+- CI now tests Go 1.24 and stable with randomized tests, race detection, and a
+  coverage floor.
 
 ## [0.2.0] - 2026-08-31
 

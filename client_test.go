@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"bytes"
@@ -24,10 +24,10 @@ func TestLogin(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	resp, err := c.Login()
+	resp, err := c.Login(t.Context(), testCredentials)
 	if err != nil {
 		t.Fatalf("Login() error: %v", err)
 	}
@@ -60,13 +60,13 @@ func TestLoginConfiguresFOS91SaveEndpoint(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	if _, err := c.Login(); err != nil {
+	if _, err := c.Login(t.Context(), testCredentials); err != nil {
 		t.Fatalf("Login() error: %v", err)
 	}
-	if err := c.SaveZoneConfig("abc"); err != nil {
+	if err := c.SaveZoneConfig(t.Context(), "abc"); err != nil {
 		t.Fatalf("SaveZoneConfig() error: %v", err)
 	}
 }
@@ -90,21 +90,21 @@ func TestLoginWithoutBodyMarksLegacyVersionAndBlocksWrites(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	resp, err := c.Login()
+	resp, err := c.Login(t.Context(), testCredentials)
 	if err != nil {
 		t.Fatalf("Login() error: %v", err)
 	}
 	if resp.FirmwareVersion != "" {
 		t.Fatalf("expected empty firmware version, got %q", resp.FirmwareVersion)
 	}
-	if err := c.Post("/test/create", nil); !errors.Is(err, ErrUnsupportedOperation) {
-		t.Fatalf("expected ErrUnsupportedOperation for POST, got %v", err)
+	if err := c.post(t.Context(), "/test/create", nil); !errors.Is(err, ErrUnknownFOSVersion) {
+		t.Fatalf("expected ErrUnknownFOSVersion for POST, got %v", err)
 	}
-	if err := c.Patch("/test/update", nil); !errors.Is(err, ErrUnsupportedOperation) {
-		t.Fatalf("expected ErrUnsupportedOperation for PATCH, got %v", err)
+	if err := c.patch(t.Context(), "/test/update", nil); !errors.Is(err, ErrUnknownFOSVersion) {
+		t.Fatalf("expected ErrUnknownFOSVersion for PATCH, got %v", err)
 	}
 	if postCalled || patchCalled {
 		t.Fatalf("expected write requests to be blocked before HTTP call; post=%v patch=%v", postCalled, patchCalled)
@@ -120,18 +120,18 @@ func TestLoginNoContentMarksLegacyVersion(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	resp, err := c.Login()
+	resp, err := c.Login(t.Context(), testCredentials)
 	if err != nil {
 		t.Fatalf("Login() error: %v", err)
 	}
 	if resp.FirmwareVersion != "" {
 		t.Fatalf("expected empty firmware version, got %q", resp.FirmwareVersion)
 	}
-	if err := c.Patch("/test/update", nil); !errors.Is(err, ErrUnsupportedOperation) {
-		t.Fatalf("expected ErrUnsupportedOperation for PATCH, got %v", err)
+	if err := c.patch(t.Context(), "/test/update", nil); !errors.Is(err, ErrUnknownFOSVersion) {
+		t.Fatalf("expected ErrUnknownFOSVersion for PATCH, got %v", err)
 	}
 }
 
@@ -142,10 +142,10 @@ func TestFOSVersionBelow91BlocksWrites(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v8.2.3"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v8.2.3"))
+	pointClientAt(t, c, ts.URL)
 
-	if err := c.Post("/test/create", nil); !errors.Is(err, ErrUnsupportedOperation) {
+	if err := c.post(t.Context(), "/test/create", nil); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("expected ErrUnsupportedOperation, got %v", err)
 	}
 }
@@ -158,10 +158,10 @@ func TestLoginFailure(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "wrong")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	_, err := c.Login()
+	_, err := c.Login(t.Context(), testCredentials)
 	if err == nil {
 		t.Fatal("expected error for invalid credentials")
 	}
@@ -185,13 +185,13 @@ func TestLogout(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	if _, err := c.Login(); err != nil {
+	if _, err := c.Login(t.Context(), testCredentials); err != nil {
 		t.Fatalf("Login failed: %v", err)
 	}
-	if err := c.Logout(); err != nil {
+	if err := c.Logout(t.Context()); err != nil {
 		t.Fatalf("Logout() error: %v", err)
 	}
 	if c.IsLoggedIn() {
@@ -227,7 +227,7 @@ func TestGetXMLParsing(t *testing.T) {
 	c := newTestClient(t, ts)
 
 	var resp testResponse
-	err := c.Get("/test/items", &resp)
+	err := c.get(t.Context(), "/test/items", &resp)
 	if err != nil {
 		t.Fatalf("Get() error: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestGetUnauthorized(t *testing.T) {
 	c := newTestClient(t, ts)
 
 	var resp struct{}
-	err := c.Get("/test", &resp)
+	err := c.get(t.Context(), "/test", &resp)
 	if err != ErrUnauthorized {
 		t.Errorf("expected ErrUnauthorized, got %v", err)
 	}
@@ -278,7 +278,7 @@ func TestPostXML(t *testing.T) {
 		Name    string   `xml:"name"`
 	}{Name: "test-item"}
 
-	err := c.Post("/test/create", payload)
+	err := c.post(t.Context(), "/test/create", payload)
 	if err != nil {
 		t.Fatalf("Post() error: %v", err)
 	}
@@ -302,14 +302,14 @@ func TestPatchAndDelete(t *testing.T) {
 	ts := newMockFOS(t, mux)
 	c := newTestClient(t, ts)
 
-	if err := c.Patch("/test/update", struct {
+	if err := c.patch(t.Context(), "/test/update", struct {
 		XMLName xml.Name `xml:"item"`
 		Name    string   `xml:"name"`
 	}{Name: "updated"}); err != nil {
 		t.Fatalf("Patch() error: %v", err)
 	}
 
-	if err := c.Delete("/test/delete/me"); err != nil {
+	if err := c.delete(t.Context(), "/test/delete/me"); err != nil {
 		t.Fatalf("Delete() error: %v", err)
 	}
 }
@@ -332,7 +332,7 @@ func TestAPIErrorParsing(t *testing.T) {
 	c := newTestClient(t, ts)
 
 	var resp struct{}
-	err := c.Get("/test/err", &resp)
+	err := c.get(t.Context(), "/test/err", &resp)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -353,7 +353,7 @@ func TestAPIErrorParsing(t *testing.T) {
 }
 
 func TestBuildURLAddsVFIDToExistingQuery(t *testing.T) {
-	c := NewClient("switch.example", "admin", "password")
+	c := mustNewClient(t, "switch.example")
 	c.SetVFID(128)
 
 	got := c.buildURL("/brocade-test/resource?depth=2")
@@ -381,7 +381,7 @@ func TestSetVerboseTogglesDebugLogging(t *testing.T) {
 	c.logger = slog.New(slog.NewTextHandler(&quiet, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	c.SetVerbose(false)
 	var quietResp testResponse
-	if err := c.Get("/log-test", &quietResp); err != nil {
+	if err := c.get(t.Context(), "/log-test", &quietResp); err != nil {
 		t.Fatalf("Get() with verbose false error: %v", err)
 	}
 	if quiet.Len() != 0 {
@@ -392,7 +392,7 @@ func TestSetVerboseTogglesDebugLogging(t *testing.T) {
 	c.SetLogOutput(&verbose)
 	c.SetVerbose(true)
 	var verboseResp testResponse
-	if err := c.Get("/log-test", &verboseResp); err != nil {
+	if err := c.get(t.Context(), "/log-test", &verboseResp); err != nil {
 		t.Fatalf("Get() with verbose true error: %v", err)
 	}
 	if !strings.Contains(verbose.String(), "GET response") {
@@ -400,23 +400,23 @@ func TestSetVerboseTogglesDebugLogging(t *testing.T) {
 	}
 }
 
-func TestGetWithContextCancel(t *testing.T) {
+func TestContextCancellation(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rest/running/slow", func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password",
+	c := mustNewClient(t, "localhost",
 		WithRetry(0), // 禁用重试以精确测试 context 取消
 	)
-	c.baseURL = ts.URL + "/rest/running"
+	pointClientAt(t, c, ts.URL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 
 	var resp struct{}
-	err := c.GetWithContext(ctx, "/slow", &resp)
+	err := c.get(ctx, "/slow", &resp)
 	if err == nil {
 		t.Fatal("expected context deadline error, got nil")
 	}
@@ -432,14 +432,14 @@ func TestResponseBodyLimit(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password",
+	c := mustNewClient(t, "localhost",
 		WithRetry(3),
 		WithMaxResponseBodyBytes(32),
 	)
-	c.baseURL = ts.URL + "/rest/running"
+	pointClientAt(t, c, ts.URL)
 
 	var resp struct{}
-	err := c.Get("/large", &resp)
+	err := c.get(t.Context(), "/large", &resp)
 	if !errors.Is(err, ErrResponseBodyTooLarge) {
 		t.Fatalf("Get() error = %v; want ErrResponseBodyTooLarge", err)
 	}
@@ -449,7 +449,7 @@ func TestResponseBodyLimit(t *testing.T) {
 }
 
 func TestClientCloseIsIdempotent(t *testing.T) {
-	c := NewClient("switch.example", "admin", "password")
+	c := mustNewClient(t, "switch.example")
 	if err := c.Close(); err != nil {
 		t.Fatalf("first Close() error: %v", err)
 	}
@@ -472,17 +472,17 @@ func TestRetryOnServerError(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password",
+	c := mustNewClient(t, "localhost",
 		WithRetry(3),
 		WithRetryWait(50*time.Millisecond),
 		WithRetryMaxWait(200*time.Millisecond),
 	)
-	c.baseURL = ts.URL + "/rest/running"
+	pointClientAt(t, c, ts.URL)
 
 	var resp struct {
 		OK string `xml:"ok"`
 	}
-	err := c.Get("/flaky", &resp)
+	err := c.get(t.Context(), "/flaky", &resp)
 	if err != nil {
 		t.Fatalf("expected success after retries, got: %v", err)
 	}
@@ -506,15 +506,15 @@ func TestPostDoesNotRetryOnServerError(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password",
+	c := mustNewClient(t, "localhost",
 		WithRetry(3),
 		WithRetryWait(10*time.Millisecond),
 		WithRetryMaxWait(20*time.Millisecond),
 		WithFOSVersion("v9.2.0"),
 	)
-	c.baseURL = ts.URL + "/rest/running"
+	pointClientAt(t, c, ts.URL)
 
-	err := c.Post("/mutate", nil)
+	err := c.post(t.Context(), "/mutate", nil)
 	if err == nil {
 		t.Fatal("expected server error, got nil")
 	}
@@ -532,12 +532,12 @@ func TestWriteRequiresKnownFOSVersion(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	err := c.Post("/test/create", nil)
-	if !errors.Is(err, ErrUnsupportedOperation) {
-		t.Fatalf("expected ErrUnsupportedOperation, got %v", err)
+	err := c.post(t.Context(), "/test/create", nil)
+	if !errors.Is(err, ErrUnknownFOSVersion) {
+		t.Fatalf("expected ErrUnknownFOSVersion, got %v", err)
 	}
 	if called {
 		t.Fatal("expected unknown FOS version to block the write before HTTP")
@@ -551,10 +551,10 @@ func TestUnknownFOSVersionWritesCanBeExplicitlyEnabled(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithAllowUnknownFOSVersionWrites())
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithAllowUnknownFOSVersionWrites())
+	pointClientAt(t, c, ts.URL)
 
-	if err := c.Post("/test/create", nil); err != nil {
+	if err := c.post(t.Context(), "/test/create", nil); err != nil {
 		t.Fatalf("expected explicitly enabled write to succeed, got %v", err)
 	}
 }
@@ -567,10 +567,10 @@ func TestLoginRequiresAuthorizationHeader(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
 
-	_, err := c.Login()
+	_, err := c.Login(t.Context(), testCredentials)
 	if !errors.Is(err, ErrInvalidResponse) {
 		t.Fatalf("expected ErrInvalidResponse, got %v", err)
 	}
@@ -594,16 +594,16 @@ func TestFailedReloginClearsPreviousToken(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
-	if _, err := c.Login(); err != nil {
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
+	if _, err := c.Login(t.Context(), testCredentials); err != nil {
 		t.Fatalf("first Login() error: %v", err)
 	}
 	if !c.IsLoggedIn() {
 		t.Fatal("expected client to be logged in after first login")
 	}
 
-	if _, err := c.Login(); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.Login(t.Context(), testCredentials); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("expected ErrUnauthorized, got %v", err)
 	}
 	if c.IsLoggedIn() {
@@ -623,14 +623,14 @@ func TestUnauthorizedResponseClearsToken(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password")
-	c.baseURL = ts.URL + "/rest/running"
-	if _, err := c.Login(); err != nil {
+	c := mustNewClient(t, "localhost")
+	pointClientAt(t, c, ts.URL)
+	if _, err := c.Login(t.Context(), testCredentials); err != nil {
 		t.Fatalf("Login() error: %v", err)
 	}
 
 	var result struct{}
-	if err := c.Get("/test", &result); !errors.Is(err, ErrUnauthorized) {
+	if err := c.get(t.Context(), "/test", &result); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("expected ErrUnauthorized, got %v", err)
 	}
 	if c.IsLoggedIn() {
@@ -654,7 +654,7 @@ func TestDebugLogsDoNotContainResponseBody(t *testing.T) {
 	var result struct {
 		Secret string `xml:"secret"`
 	}
-	if err := c.Get("/log-test", &result); err != nil {
+	if err := c.get(t.Context(), "/log-test", &result); err != nil {
 		t.Fatalf("Get() error: %v", err)
 	}
 	if strings.Contains(logs.String(), "do-not-log-this") {
@@ -665,8 +665,8 @@ func TestDebugLogsDoNotContainResponseBody(t *testing.T) {
 	}
 }
 
-func TestNewClientTLSConfiguration(t *testing.T) {
-	secure := NewClient("switch.example", "admin", "password")
+func TestClientTLSConfiguration(t *testing.T) {
+	secure := mustNewClient(t, "switch.example")
 	secureTransport, ok := secure.client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("expected *http.Transport, got %T", secure.client.Transport)
@@ -675,7 +675,7 @@ func TestNewClientTLSConfiguration(t *testing.T) {
 		t.Fatal("TLS certificate verification must be enabled by default")
 	}
 
-	insecure := NewClient("switch.example", "admin", "password", WithInsecureSkipVerify())
+	insecure := mustNewClient(t, "switch.example", WithInsecureSkipVerify())
 	insecureTransport, ok := insecure.client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("expected *http.Transport, got %T", insecure.client.Transport)

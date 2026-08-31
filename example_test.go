@@ -1,18 +1,20 @@
-package san_test
+package sanswitch_test
 
 import (
 	"context"
 	"fmt"
-	"os"
 
-	san "github.com/everstarmy/sanswitch"
+	"github.com/everstarmy/sanswitch"
 )
 
-func ExampleNewClient() {
-	client := san.NewClient("switch.example", "admin", os.Getenv("SAN_PASSWORD"),
-		san.WithHTTP(),
-		san.WithRetry(0),
+func ExampleNew() {
+	client, err := sanswitch.New("switch.example",
+		sanswitch.WithHTTP(),
+		sanswitch.WithRetry(0),
 	)
+	if err != nil {
+		return
+	}
 	defer func() { _ = client.Close() }()
 
 	fmt.Println(client.Timeout())
@@ -22,12 +24,12 @@ func ExampleNewClient() {
 	// 0
 }
 
-func ExampleSwitchReader() {
+func ExampleClient_consumerInterface() {
 	var reader interface {
-		GetPortsWithContext(context.Context) ([]san.PortInfo, error)
-	} = (*san.SANSwitch)(nil)
+		Ports(context.Context) ([]sanswitch.Port, error)
+	} = (*sanswitch.Client)(nil)
 
 	fmt.Printf("%T\n", reader)
 	// Output:
-	// *san.SANSwitch
+	// *sanswitch.Client
 }

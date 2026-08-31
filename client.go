@@ -1,9 +1,10 @@
-package san
+package sanswitch
 
 import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/xml"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,89 +35,115 @@ const (
 	zoneCleanupTimeout                = 5 * time.Second
 )
 
-// ClientOption 是一个函数选项类型，用于配置 Client 的参数
-type ClientOption func(*Client)
+// Credentials contains the short-lived credentials used for Login.
+type Credentials struct {
+	Username string
+	Password string
+}
+
+type clientOptions struct {
+	timeout                      time.Duration
+	retryCount                   int
+	retryWaitTime                time.Duration
+	retryMaxWaitTime             time.Duration
+	maxResponseBodyBytes         int64
+	logger                       *slog.Logger
+	tlsConfig                    *tls.Config
+	transport                    http.RoundTripper
+	useHTTP                      bool
+	fosVersion                   string
+	allowUnknownFOSVersionWrites bool
+}
+
+// ClientOption configures a Client before it is constructed.
+type ClientOption func(*clientOptions)
 
 // WithTimeout 设置 HTTP 请求的超时时间
 func WithTimeout(timeout time.Duration) ClientOption {
-	return func(c *Client) {
-		c.timeout = timeout
+	return func(o *clientOptions) {
+		o.timeout = timeout
 	}
 }
 
 // WithRetry 设置请求的重试次数（0 表示不重试）
 func WithRetry(count int) ClientOption {
-	return func(c *Client) {
-		c.retryCount = count
+	return func(o *clientOptions) {
+		o.retryCount = count
 	}
 }
 
 // WithRetryWait 设置重试的初始等待时间（用于指数退避计算起点）
 func WithRetryWait(wait time.Duration) ClientOption {
-	return func(c *Client) {
-		c.retryWaitTime = wait
+	return func(o *clientOptions) {
+		o.retryWaitTime = wait
 	}
 }
 
 // WithRetryMaxWait 设置重试的最大等待时间上限
 func WithRetryMaxWait(maxWait time.Duration) ClientOption {
-	return func(c *Client) {
-		c.retryMaxWaitTime = maxWait
+	return func(o *clientOptions) {
+		o.retryMaxWaitTime = maxWait
 	}
 }
 
 // WithMaxResponseBodyBytes limits the maximum response body size accepted by
-// the client. A non-positive value leaves the default limit unchanged.
+// the client. New rejects non-positive values.
 func WithMaxResponseBodyBytes(maxBytes int64) ClientOption {
-	return func(c *Client) {
-		if maxBytes > 0 {
-			c.maxResponseBodyBytes = maxBytes
-		}
+	return func(o *clientOptions) {
+		o.maxResponseBodyBytes = maxBytes
 	}
 }
 
 // WithLogger 注入自定义的结构化日志 logger
 func WithLogger(logger *slog.Logger) ClientOption {
-	return func(c *Client) {
-		c.logger = logger
-		c.customLogger = logger != nil
+	return func(o *clientOptions) {
+		o.logger = logger
 	}
 }
 
 // WithTLSConfig 设置 HTTPS 请求使用的 TLS 配置。
 // 配置会在创建 Client 时复制，调用方之后可以安全地复用或修改原配置。
 func WithTLSConfig(config *tls.Config) ClientOption {
-	return func(c *Client) {
+	return func(o *clientOptions) {
 		if config == nil {
-			c.tlsConfig = nil
+			o.tlsConfig = nil
 			return
 		}
-		c.tlsConfig = config.Clone()
+		o.tlsConfig = config.Clone()
+	}
+}
+
+// WithTransport injects the HTTP transport used by the client. It is useful
+// for proxies, observability, and deterministic tests. It cannot be combined
+// with WithTLSConfig or WithInsecureSkipVerify.
+func WithTransport(transport http.RoundTripper) ClientOption {
+	return func(o *clientOptions) {
+		o.transport = transport
 	}
 }
 
 // WithInsecureSkipVerify 显式关闭 HTTPS 服务器证书校验。
 // 仅建议用于测试或明确使用自签名证书且有其他网络隔离措施的环境。
 func WithInsecureSkipVerify() ClientOption {
-	return func(c *Client) {
+	return func(o *clientOptions) {
 		// This is intentionally opt-in; the secure default leaves verification enabled.
-		c.tlsConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- explicitly requested by the caller
+		o.tlsConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- explicitly requested by the caller
 	}
 }
 
 // WithHTTP 使用 HTTP 替代 HTTPS（不推荐用于生产环境）
 func WithHTTP() ClientOption {
-	return func(c *Client) {
-		c.useHTTP = true
+	return func(o *clientOptions) {
+		o.useHTTP = true
 	}
 }
 
 // WithFOSVersion 设置 Fabric OS 版本，用于兼容不同版本的 REST endpoint。
-// NewSANSwitch 会在登录后自动记录版本；直接使用 NewClient 时可用该选项显式指定。
+// Open records the version reported at login; New callers may use this option
+// when the version is known out of band.
 func WithFOSVersion(version string) ClientOption {
-	return func(c *Client) {
-		c.fosVersion = strings.TrimSpace(version)
-		c.fosVersionConfigured = c.fosVersion != ""
+	return func(o *clientOptions) {
+		o.fosVersion = strings.TrimSpace(version)
 	}
 }
 
@@ -123,25 +151,19 @@ func WithFOSVersion(version string) ClientOption {
 // FOS version is unknown. The safer default is to block writes until the
 // version is supplied explicitly or learned during login.
 func WithAllowUnknownFOSVersionWrites() ClientOption {
-	return func(c *Client) {
-		c.allowUnknownFOSVersionWrites = true
+	return func(o *clientOptions) {
+		o.allowUnknownFOSVersionWrites = true
 	}
 }
 
-// Client 是 Brocade FOS REST API 的 HTTP 客户端，封装了认证、请求发送、重试、
-// 日志、Virtual Fabric 路由等核心功能。
-// 通过 NewClient 创建实例，或使用 NewSANSwitch 自动完成登录。
+// Client is a concurrency-safe Brocade Fabric OS REST API client.
 type Client struct {
-	host                         string
-	username                     string
-	password                     string
+	endpoint                     *url.URL
+	switchAddress                string
 	authToken                    string
 	client                       *http.Client
 	logger                       *slog.Logger
-	baseURL                      string // 测试用：覆盖默认 URL 前缀
-	tlsConfig                    *tls.Config
 	vfID                         int
-	useHTTP                      bool
 	logOutput                    io.Writer
 	verbose                      bool
 	customLogger                 bool
@@ -150,16 +172,16 @@ type Client struct {
 	retryWaitTime                time.Duration
 	retryMaxWaitTime             time.Duration
 	maxResponseBodyBytes         int64
-	fosVersion                   string
+	fosVersion                   Version
 	fosVersionConfigured         bool
 	allowUnknownFOSVersionWrites bool
+	waitForRetry                 func(context.Context, time.Duration) error
 	stateMu                      sync.RWMutex
 	loggerMu                     sync.RWMutex
-	zoneWriteMu                  sync.Mutex
 }
 
-// LoginResponse 是 POST /login 的 XML 响应，包含登录后的用户信息和交换机参数
-type LoginResponse struct {
+// SessionInfo 是 POST /login 的 XML 响应，包含登录后的用户信息和交换机参数
+type SessionInfo struct {
 	XMLName           xml.Name `xml:"Response"`
 	UserName          string   `xml:"switch-parameters>user-name"`
 	ChassisAccessRole string   `xml:"switch-parameters>chassis-access-role"`
@@ -174,15 +196,9 @@ type apiResponse struct {
 	Body       []byte
 }
 
-// NewClient 创建一个新的 FOS REST API 客户端实例（不自动登录）。
-// 默认使用 HTTPS（校验证书）、30 秒超时、3 次指数退避重试。
-// 可通过 ClientOption 函数选项自定义超时、重试、日志和协议等配置。
-func NewClient(host, username, password string, opts ...ClientOption) *Client {
-	c := &Client{
-		host:                 host,
-		username:             username,
-		password:             password,
-		logOutput:            os.Stderr,
+// New constructs a client without performing network I/O.
+func New(endpoint string, opts ...ClientOption) (*Client, error) {
+	options := clientOptions{
 		timeout:              DefaultTimeout,
 		retryCount:           DefaultRetryCount,
 		retryWaitTime:        DefaultRetryWaitTime,
@@ -192,36 +208,81 @@ func NewClient(host, username, password string, opts ...ClientOption) *Client {
 
 	for _, opt := range opts {
 		if opt != nil {
-			opt(c)
+			opt(&options)
 		}
 	}
 
-	if c.timeout <= 0 {
-		c.timeout = DefaultTimeout
+	if options.timeout <= 0 {
+		return nil, fmt.Errorf("%w: timeout must be positive", ErrInvalidConfig)
 	}
-	if c.retryCount < 0 {
-		c.retryCount = 0
+	if options.retryCount < 0 {
+		return nil, fmt.Errorf("%w: retry count must not be negative", ErrInvalidConfig)
 	}
-	if c.retryWaitTime < 0 {
-		c.retryWaitTime = 0
+	if options.retryWaitTime < 0 {
+		return nil, fmt.Errorf("%w: retry wait must not be negative", ErrInvalidConfig)
 	}
-	if c.retryMaxWaitTime < c.retryWaitTime {
-		c.retryMaxWaitTime = c.retryWaitTime
+	if options.retryMaxWaitTime < options.retryWaitTime {
+		return nil, fmt.Errorf("%w: maximum retry wait is less than initial retry wait", ErrInvalidConfig)
 	}
-	if c.maxResponseBodyBytes <= 0 {
-		c.maxResponseBodyBytes = DefaultMaxResponseBodyBytes
+	if options.maxResponseBodyBytes <= 0 {
+		return nil, fmt.Errorf("%w: response body limit must be positive", ErrInvalidConfig)
 	}
-
-	// 若未注入自定义 logger，则使用默认 logger。
-	if c.logger == nil {
-		c.logger = slog.Default()
+	if options.transport != nil && options.tlsConfig != nil {
+		return nil, fmt.Errorf("%w: custom transport and TLS config are mutually exclusive", ErrInvalidConfig)
 	}
 
-	c.client = &http.Client{
-		Transport: cloneHTTPTransport(c.tlsConfig),
-		Timeout:   c.timeout,
+	parsedEndpoint, err := parseEndpoint(endpoint, options.useHTTP)
+	if err != nil {
+		return nil, err
 	}
-	return c
+
+	var version Version
+	if options.fosVersion != "" {
+		version, err = ParseVersion(options.fosVersion)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	transport := options.transport
+	if transport == nil {
+		transport = cloneHTTPTransport(options.tlsConfig)
+	}
+	logger := options.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	c := &Client{
+		endpoint:                     parsedEndpoint,
+		switchAddress:                parsedEndpoint.Hostname(),
+		client:                       &http.Client{Transport: transport, Timeout: options.timeout},
+		logger:                       logger,
+		logOutput:                    os.Stderr,
+		customLogger:                 options.logger != nil,
+		timeout:                      options.timeout,
+		retryCount:                   options.retryCount,
+		retryWaitTime:                options.retryWaitTime,
+		retryMaxWaitTime:             options.retryMaxWaitTime,
+		maxResponseBodyBytes:         options.maxResponseBodyBytes,
+		fosVersion:                   version,
+		fosVersionConfigured:         version.Valid(),
+		allowUnknownFOSVersionWrites: options.allowUnknownFOSVersionWrites,
+		waitForRetry:                 waitForRetry,
+	}
+	return c, nil
+}
+
+// Open constructs a client and authenticates it with short-lived credentials.
+func Open(ctx context.Context, endpoint string, credentials Credentials, opts ...ClientOption) (*Client, error) {
+	client, err := New(endpoint, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := client.Login(ctx, credentials); err != nil {
+		_ = client.Close()
+		return nil, err
+	}
+	return client, nil
 }
 
 // Timeout 返回当前配置的请求超时时间
@@ -291,20 +352,15 @@ func (c *Client) SetVFID(vfID int) {
 }
 
 // Login 使用 Basic Auth 登录交换机并获取认证 Token。
-// 成功后将 Token 设置到后续请求的 Authorization 头中。
-// 对应 API: POST /rest/login
-func (c *Client) Login() (*LoginResponse, error) {
-	return c.LoginWithContext(context.Background())
-}
-
-// LoginWithContext 使用 Basic Auth 登录交换机并获取认证 Token。
 // ctx 取消时会中止当前登录请求。
-func (c *Client) LoginWithContext(ctx context.Context) (*LoginResponse, error) {
-	ctx = nonNilContext(ctx)
+func (c *Client) Login(ctx context.Context, credentials Credentials) (*SessionInfo, error) {
+	if strings.TrimSpace(credentials.Username) == "" || credentials.Password == "" {
+		return nil, fmt.Errorf("%w: username and password are required", ErrInvalidConfig)
+	}
 	c.clearAuth()
 	url := c.restBase() + c.endpoints().Login()
 	headers := c.baseHeaders()
-	headers.Set("Authorization", "Basic "+base64Encode(c.username+":"+c.password))
+	headers.Set("Authorization", "Basic "+base64Encode(credentials.Username+":"+credentials.Password))
 
 	resp, err := c.do(ctx, http.MethodPost, url, nil, headers, false)
 
@@ -325,29 +381,29 @@ func (c *Client) LoginWithContext(ctx context.Context) (*LoginResponse, error) {
 	}
 
 	if len(resp.Body) == 0 {
-		c.setAuthenticated(authHeader, "")
-		return &LoginResponse{}, nil
+		c.setAuthenticated(authHeader, Version{})
+		return &SessionInfo{}, nil
 	}
 
-	var result LoginResponse
+	var result SessionInfo
 	if err := xml.Unmarshal(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("login response: %w", invalidResponseError(err))
 	}
-	c.setAuthenticated(authHeader, result.FirmwareVersion)
+	var version Version
+	if result.FirmwareVersion != "" {
+		version, err = ParseVersion(result.FirmwareVersion)
+		if err != nil {
+			return nil, fmt.Errorf("login response firmware version: %w", err)
+		}
+	}
+	c.setAuthenticated(authHeader, version)
 
 	return &result, nil
 }
 
-// Logout 注销当前会话，清除认证 Token。
-// 对应 API: POST /rest/logout
-func (c *Client) Logout() error {
-	return c.LogoutWithContext(context.Background())
-}
-
-// LogoutWithContext 注销当前会话并清除认证 Token。
+// Logout 注销当前会话并清除认证 Token。
 // ctx 取消时会中止当前注销请求。
-func (c *Client) LogoutWithContext(ctx context.Context) error {
-	ctx = nonNilContext(ctx)
+func (c *Client) Logout(ctx context.Context) error {
 	url := c.restBase() + c.endpoints().Logout()
 
 	resp, err := c.do(ctx, http.MethodPost, url, nil, c.authHeaders(), false)
@@ -368,66 +424,62 @@ func (c *Client) LogoutWithContext(ctx context.Context) error {
 }
 
 func (c *Client) buildURL(endpoint string) string {
-	var rawURL string
-	if c.baseURL != "" {
-		rawURL = c.baseURL + endpoint
-	} else {
-		rawURL = fmt.Sprintf("%s://%s/rest/running%s", c.scheme(), c.host, endpoint)
+	base := *c.endpoint
+	relative, err := url.Parse(endpoint)
+	if err != nil {
+		return ""
 	}
+	prefixPath := strings.TrimRight(base.Path, "/") + "/rest/running"
+	prefixRawPath := strings.TrimRight(base.EscapedPath(), "/") + "/rest/running"
+	base.Path = prefixPath + relative.Path
+	if relative.RawPath != "" || base.RawPath != "" {
+		base.RawPath = prefixRawPath + relative.EscapedPath()
+	}
+	base.RawQuery = relative.RawQuery
 	c.stateMu.RLock()
 	vfID := c.vfID
 	c.stateMu.RUnlock()
 	if vfID > 0 {
-		parsed, err := url.Parse(rawURL)
-		if err == nil {
-			query := parsed.Query()
-			query.Set("vf-id", fmt.Sprintf("%d", vfID))
-			parsed.RawQuery = query.Encode()
-			rawURL = parsed.String()
-		}
+		query := base.Query()
+		query.Set("vf-id", strconv.Itoa(vfID))
+		base.RawQuery = query.Encode()
 	}
-	return rawURL
+	return base.String()
 }
 
-// restBase 返回 REST API 的基础 URL 前缀（不含 /running），用于 login/logout 等端点
 func (c *Client) restBase() string {
-	if c.baseURL != "" {
-		// baseURL 格式: http://host/rest/running  →  截取到 /rest
-		baseURL := strings.TrimRight(c.baseURL, "/")
-		if strings.HasSuffix(baseURL, "/rest/running") {
-			return strings.TrimSuffix(baseURL, "/running")
+	base := *c.endpoint
+	base.Path = strings.TrimRight(base.Path, "/") + "/rest"
+	return base.String()
+}
+
+func parseEndpoint(raw string, useHTTP bool) (*url.URL, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, fmt.Errorf("%w: endpoint is required", ErrInvalidConfig)
+	}
+	if !strings.Contains(value, "://") {
+		scheme := "https"
+		if useHTTP {
+			scheme = "http"
 		}
-		return baseURL
+		value = scheme + "://" + value
 	}
-	return fmt.Sprintf("%s://%s/rest", c.scheme(), c.host)
-}
-
-// scheme 根据配置返回 URL 协议
-func (c *Client) scheme() string {
-	if c.useHTTP {
-		return "http"
+	endpoint, err := url.Parse(value)
+	if err != nil || endpoint.Host == "" {
+		return nil, fmt.Errorf("%w: invalid endpoint %q", ErrInvalidConfig, raw)
 	}
-	return "https"
-}
-
-// Get 执行 GET 请求并将 XML 响应解析到 result 中。
-func (c *Client) Get(endpoint string, result any) error {
-	return c.GetWithContext(context.Background(), endpoint, result)
-}
-
-// Post 执行 POST 请求，将 payload 序列化为 XML 发送到指定端点。
-func (c *Client) Post(endpoint string, payload any) error {
-	return c.PostWithContext(context.Background(), endpoint, payload)
-}
-
-// Patch 执行 PATCH 请求，将 payload 序列化为 XML 发送到指定端点。
-func (c *Client) Patch(endpoint string, payload any) error {
-	return c.PatchWithContext(context.Background(), endpoint, payload)
-}
-
-// Delete 执行 DELETE 请求，删除指定端点的资源。
-func (c *Client) Delete(endpoint string) error {
-	return c.DeleteWithContext(context.Background(), endpoint)
+	if endpoint.Scheme != "https" && endpoint.Scheme != "http" {
+		return nil, fmt.Errorf("%w: unsupported endpoint scheme %q", ErrInvalidConfig, endpoint.Scheme)
+	}
+	if useHTTP {
+		endpoint.Scheme = "http"
+	}
+	if endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return nil, fmt.Errorf("%w: endpoint must not contain user info, query, or fragment", ErrInvalidConfig)
+	}
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/")
+	return endpoint, nil
 }
 
 // IsLoggedIn 返回当前是否已持有认证 Token。
@@ -435,6 +487,22 @@ func (c *Client) IsLoggedIn() bool {
 	c.stateMu.RLock()
 	defer c.stateMu.RUnlock()
 	return c.authToken != ""
+}
+
+// Version returns the Fabric OS version learned during Login or configured at
+// construction. The boolean is false when the version is unknown.
+func (c *Client) Version() (Version, bool) {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	return c.fosVersion, c.fosVersion.Valid()
+}
+
+// Capabilities returns the operations supported by the known Fabric OS
+// version. Unknown versions remain read-only unless explicitly overridden.
+func (c *Client) Capabilities() Capabilities {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	return capabilitiesFor(c.fosVersion, c.allowUnknownFOSVersionWrites)
 }
 
 // isRetryableMethod 判断 HTTP 方法是否支持自动重试（仅 GET/HEAD/OPTIONS 等幂等方法）
@@ -479,7 +547,12 @@ func (c *Client) retryAfter(resp *apiResponse, attempt int) time.Duration {
 		}
 		wait *= 2
 	}
-	return min(wait, c.retryMaxWaitTime)
+	wait = min(wait, c.retryMaxWaitTime)
+	if wait <= 1 {
+		return wait
+	}
+	// Full jitter prevents clients retrying a recovering switch in lockstep.
+	return time.Duration(rand.Int64N(int64(wait) + 1))
 }
 
 func parseRetryAfter(value string) (time.Duration, bool) {
@@ -550,7 +623,7 @@ func (c *Client) newRequest(ctx context.Context, method, url string, body []byte
 	if len(body) > 0 {
 		bodyReader = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(nonNilContext(ctx), method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +636,6 @@ func (c *Client) newRequest(ctx context.Context, method, url string, body []byte
 }
 
 func (c *Client) do(ctx context.Context, method, url string, body []byte, headers http.Header, retry bool) (*apiResponse, error) {
-	ctx = nonNilContext(ctx)
 	retryCount := c.RetryCount()
 	if !retry || !isRetryableMethod(method) {
 		retryCount = 0
@@ -582,17 +654,17 @@ func (c *Client) do(ctx context.Context, method, url string, body []byte, header
 				return nil, ctxErr
 			}
 			lastErr = err
-			if attempt >= attempts {
+			if attempt >= attempts || !isRetryableError(err) {
 				break
 			}
-			if err := waitForRetry(ctx, c.retryAfter(nil, attempt)); err != nil {
+			if err := c.waitForRetry(ctx, c.retryAfter(nil, attempt)); err != nil {
 				return nil, err
 			}
 			continue
 		}
 
 		responseBody, readErr := readResponseBody(resp.Body, c.maxResponseBodyBytes)
-		closeErr := resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			if errors.Is(readErr, ErrResponseBodyTooLarge) {
 				return nil, readErr
@@ -601,29 +673,18 @@ func (c *Client) do(ctx context.Context, method, url string, body []byte, header
 			if attempt >= attempts {
 				break
 			}
-			if err := waitForRetry(ctx, c.retryAfter(nil, attempt)); err != nil {
+			if err := c.waitForRetry(ctx, c.retryAfter(nil, attempt)); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		if closeErr != nil {
-			lastErr = closeErr
-			if attempt >= attempts {
-				break
-			}
-			if err := waitForRetry(ctx, c.retryAfter(nil, attempt)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-
 		apiResp := &apiResponse{
 			StatusCode: resp.StatusCode,
 			Header:     resp.Header.Clone(),
 			Body:       responseBody,
 		}
 		if isRetryableStatus(apiResp.StatusCode) && attempt < attempts {
-			if err := waitForRetry(ctx, c.retryAfter(apiResp, attempt)); err != nil {
+			if err := c.waitForRetry(ctx, c.retryAfter(apiResp, attempt)); err != nil {
 				return nil, err
 			}
 			continue
@@ -635,7 +696,35 @@ func (c *Client) do(ctx context.Context, method, url string, body []byte, header
 }
 
 func isRetryableStatus(status int) bool {
-	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+	switch status {
+	case http.StatusRequestTimeout,
+		http.StatusTooEarly,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func isRetryableError(err error) bool {
+	var certificateError *tls.CertificateVerificationError
+	if errors.As(err, &certificateError) {
+		return false
+	}
+	var unknownAuthority x509.UnknownAuthorityError
+	if errors.As(err, &unknownAuthority) {
+		return false
+	}
+	var hostnameError x509.HostnameError
+	if errors.As(err, &hostnameError) {
+		return false
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && (netErr.Timeout() || !errors.Is(err, context.Canceled))
 }
 
 func waitForRetry(ctx context.Context, wait time.Duration) error {
@@ -657,14 +746,14 @@ func waitForRetry(ctx context.Context, wait time.Duration) error {
 	}
 }
 
-func (c *Client) setAuthenticated(authToken, firmwareVersion string) {
+func (c *Client) setAuthenticated(authToken string, version Version) {
 	c.stateMu.Lock()
 	defer c.stateMu.Unlock()
 	c.authToken = authToken
-	if firmwareVersion != "" {
-		c.fosVersion = firmwareVersion
+	if version.Valid() {
+		c.fosVersion = version
 	} else if !c.fosVersionConfigured {
-		c.fosVersion = legacyFOSVersion
+		c.fosVersion = Version{}
 	}
 }
 
@@ -681,13 +770,6 @@ func (c *Client) debug(message string, args ...any) {
 	if logger != nil {
 		logger.Debug(message, args...)
 	}
-}
-
-func nonNilContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }
 
 func wrapRequestError(err error) error {
@@ -737,11 +819,7 @@ func readResponseBody(body io.Reader, maxBytes int64) ([]byte, error) {
 	return responseBody, nil
 }
 
-// ---------- WithContext 变体：支持请求级 context 取消与超时控制 ----------
-
-// GetWithContext 执行带 context 的 GET 请求
-func (c *Client) GetWithContext(ctx context.Context, endpoint string, result any) error {
-	ctx = nonNilContext(ctx)
+func (c *Client) get(ctx context.Context, endpoint string, result any) error {
 	url := c.buildURL(endpoint)
 
 	resp, err := c.do(ctx, http.MethodGet, url, nil, c.authHeaders(), true)
@@ -761,30 +839,23 @@ func (c *Client) GetWithContext(ctx context.Context, endpoint string, result any
 	return nil
 }
 
-// PostWithContext 执行带 context 的 POST 请求
-func (c *Client) PostWithContext(ctx context.Context, endpoint string, payload any) error {
-	return c.mutateWithContext(nonNilContext(ctx), http.MethodPost, endpoint, payload, true)
+func (c *Client) post(ctx context.Context, endpoint string, payload any) error {
+	return c.mutate(ctx, http.MethodPost, endpoint, payload, true)
 }
 
-// PatchWithContext 执行带 context 的 PATCH 请求
-func (c *Client) PatchWithContext(ctx context.Context, endpoint string, payload any) error {
-	return c.mutateWithContext(nonNilContext(ctx), http.MethodPatch, endpoint, payload, true)
+func (c *Client) patch(ctx context.Context, endpoint string, payload any) error {
+	return c.mutate(ctx, http.MethodPatch, endpoint, payload, true)
 }
 
-// DeleteWithContext 执行带 context 的 DELETE 请求
-func (c *Client) DeleteWithContext(ctx context.Context, endpoint string) error {
-	return c.mutateWithContext(nonNilContext(ctx), http.MethodDelete, endpoint, nil, true)
+func (c *Client) delete(ctx context.Context, endpoint string) error {
+	return c.mutate(ctx, http.MethodDelete, endpoint, nil, true)
 }
 
-func (c *Client) patchWithoutVersionGate(endpoint string, payload any) error {
-	return c.patchWithoutVersionGateWithContext(context.Background(), endpoint, payload)
+func (c *Client) patchWithoutVersionGate(ctx context.Context, endpoint string, payload any) error {
+	return c.mutate(ctx, http.MethodPatch, endpoint, payload, false)
 }
 
-func (c *Client) patchWithoutVersionGateWithContext(ctx context.Context, endpoint string, payload any) error {
-	return c.mutateWithContext(nonNilContext(ctx), http.MethodPatch, endpoint, payload, false)
-}
-
-func (c *Client) mutateWithContext(ctx context.Context, method, endpoint string, payload any, enforceVersionGate bool) error {
+func (c *Client) mutate(ctx context.Context, method, endpoint string, payload any, enforceVersionGate bool) error {
 	if enforceVersionGate {
 		if err := c.ensureWriteSupported(); err != nil {
 			return err
@@ -839,8 +910,12 @@ func base64Encode(s string) string {
 }
 
 func (c *Client) ensureWriteSupported() error {
-	if c.endpoints().allowWrite() {
+	endpointSet := c.endpoints()
+	if endpointSet.allowWrite() {
 		return nil
 	}
-	return fmt.Errorf("%w: FOS %s does not support write operations", ErrUnsupportedOperation, c.endpoints().version)
+	if !endpointSet.version.Valid() {
+		return fmt.Errorf("%w: write operations require a known FOS version", ErrUnknownFOSVersion)
+	}
+	return fmt.Errorf("%w: FOS %s does not support write operations", ErrUnsupportedOperation, endpointSet.version)
 }

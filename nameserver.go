@@ -1,20 +1,20 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
 )
 
-// FibreChannelNameServerResponse 是 GET /brocade-name-server/fibrechannel-name-server 的 XML 响应包装
-type FibreChannelNameServerResponse struct {
-	XMLName     xml.Name                     `xml:"Response"`
-	NameServers []FibreChannelNameServerInfo `xml:"fibrechannel-name-server"`
+// fibreChannelNameServerResponse 是 GET /brocade-name-server/fibrechannel-name-server 的 XML 响应包装
+type fibreChannelNameServerResponse struct {
+	XMLName     xml.Name          `xml:"Response"`
+	NameServers []NameServerEntry `xml:"fibrechannel-name-server"`
 }
 
-// FibreChannelNameServerInfo 描述 Fabric Name Server 中注册的一个设备条目，
+// NameServerEntry 描述 Fabric Name Server 中注册的一个设备条目，
 // 包含端口 WWN、节点 WWN、端口类型、FC4 类型、速率、协议等字段。
 // 对应 YANG 模型: brocade-name-server/fibrechannel-name-server
-type FibreChannelNameServerInfo struct {
+type NameServerEntry struct {
 	XMLName                    xml.Name `xml:"fibrechannel-name-server" json:"-"`
 	PortID                     string   `xml:"port-id" json:"port_id"`
 	PortName                   string   `xml:"port-name" json:"port_name"`
@@ -46,16 +46,10 @@ type FibreChannelNameServerInfo struct {
 	PlatformNameIDSymbolicName string   `xml:"platform-name-id-symbolic-name" json:"platform_name_id_symbolic_name"`
 }
 
-// GetFibreChannelNameServers 获取 Fabric Name Server 中注册的所有设备条目。
-// 对应 API: GET /brocade-name-server/fibrechannel-name-server
-func (c *Client) GetFibreChannelNameServers() ([]FibreChannelNameServerInfo, error) {
-	return c.GetFibreChannelNameServersWithContext(context.Background())
-}
-
-// GetFibreChannelNameServersWithContext 获取 Name Server 条目并允许取消请求。
-func (c *Client) GetFibreChannelNameServersWithContext(ctx context.Context) ([]FibreChannelNameServerInfo, error) {
-	var resp FibreChannelNameServerResponse
-	err := c.GetWithContext(ctx, c.endpoints().NameServer(), &resp)
+// FibreChannelNameServers 获取 Name Server 条目并允许取消请求。
+func (c *Client) FibreChannelNameServers(ctx context.Context) ([]NameServerEntry, error) {
+	var resp fibreChannelNameServerResponse
+	err := c.get(ctx, c.endpoints().NameServer(), &resp)
 	if err != nil {
 		return nil, err
 	}

@@ -1,19 +1,19 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
 )
 
-// FibreChannelStatisticsResponse 是 GET /brocade-interface/fibrechannel-statistics 的 XML 响应包装
-type FibreChannelStatisticsResponse struct {
-	XMLName    xml.Name                     `xml:"Response"`
-	Statistics []FibreChannelStatisticsInfo `xml:"fibrechannel-statistics"`
+// fibreChannelStatisticsResponse 是 GET /brocade-interface/fibrechannel-statistics 的 XML 响应包装
+type fibreChannelStatisticsResponse struct {
+	XMLName    xml.Name                 `xml:"Response"`
+	Statistics []FibreChannelStatistics `xml:"fibrechannel-statistics"`
 }
 
-// FibreChannelStatisticsInfo 描述一个 FC 端口的性能统计计数器，
+// FibreChannelStatistics 描述一个 FC 端口的性能统计计数器，
 // 包含流量、错误、链路状态、缓冲区、FEC 等 120+ 项指标
-type FibreChannelStatisticsInfo struct {
+type FibreChannelStatistics struct {
 	XMLName                              xml.Name `xml:"fibrechannel-statistics" json:"-"`
 	Name                                 string   `xml:"name" json:"name"`
 	SamplingInterval                     uint16   `xml:"sampling-interval" json:"sampling_interval"`
@@ -137,16 +137,10 @@ type FibreChannelStatisticsInfo struct {
 	RemotePeerBBCredit                   uint64   `xml:"remote-buffer-credit-info>peer-bb-credit" json:"remote_peer_bb_credit"`
 }
 
-// GetFibreChannelStatistics 获取所有 FC 端口的性能统计计数器
-// 对应 API: GET /brocade-interface/fibrechannel-statistics
-func (c *Client) GetFibreChannelStatistics() ([]FibreChannelStatisticsInfo, error) {
-	return c.GetFibreChannelStatisticsWithContext(context.Background())
-}
-
-// GetFibreChannelStatisticsWithContext 获取 FC 端口性能统计并允许取消请求。
-func (c *Client) GetFibreChannelStatisticsWithContext(ctx context.Context) ([]FibreChannelStatisticsInfo, error) {
-	var resp FibreChannelStatisticsResponse
-	err := c.GetWithContext(ctx, c.endpoints().FibreChannelStatistics(), &resp)
+// FibreChannelStatistics 获取 FC 端口性能统计并允许取消请求。
+func (c *Client) FibreChannelStatistics(ctx context.Context) ([]FibreChannelStatistics, error) {
+	var resp fibreChannelStatisticsResponse
+	err := c.get(ctx, c.endpoints().FibreChannelStatistics(), &resp)
 	if err != nil {
 		return nil, err
 	}

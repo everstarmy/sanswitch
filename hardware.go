@@ -1,20 +1,20 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
 )
 
-// ChassisResponse 是 GET /brocade-chassis/chassis 的 XML 响应包装
-type ChassisResponse struct {
-	XMLName xml.Name       `xml:"Response"`
-	Chassis []HardwareInfo `xml:"chassis"`
+// chassisResponse 是 GET /brocade-chassis/chassis 的 XML 响应包装
+type chassisResponse struct {
+	XMLName xml.Name   `xml:"Response"`
+	Chassis []Hardware `xml:"chassis"`
 }
 
-// HardwareInfo 描述交换机机箱硬件信息，包含机箱类型、序列号、CPU、内存、Flash、
+// Hardware 描述交换机机箱硬件信息，包含机箱类型、序列号、CPU、内存、Flash、
 // 电源数量、风扇数量和温度等字段。
 // 对应 YANG 模型: brocade-chassis/chassis
-type HardwareInfo struct {
+type Hardware struct {
 	XMLName          xml.Name `xml:"chassis" json:"-"`
 	ChassisType      string   `xml:"chassis-type" json:"chassis_type"`             // 机箱类型（如 "SAN Director"）
 	ChassisSerial    string   `xml:"serial-number" json:"chassis_serial"`          // 机箱序列号
@@ -28,17 +28,10 @@ type HardwareInfo struct {
 	Temperature      string   `xml:"temperature" json:"temperature"`               // 温度（字符串格式）
 }
 
-// GetHardwareInfo 获取交换机机箱硬件信息（取列表中的第一条记录）。
-// 若响应为空则返回 ErrNotFound。
-// 对应 API: GET /brocade-chassis/chassis
-func (c *Client) GetHardwareInfo() (*HardwareInfo, error) {
-	return c.GetHardwareInfoWithContext(context.Background())
-}
-
-// GetHardwareInfoWithContext 获取交换机机箱硬件信息并允许取消请求。
-func (c *Client) GetHardwareInfoWithContext(ctx context.Context) (*HardwareInfo, error) {
-	var resp ChassisResponse
-	err := c.GetWithContext(ctx, c.endpoints().Chassis(), &resp)
+// Hardware returns chassis hardware information.
+func (c *Client) Hardware(ctx context.Context) (*Hardware, error) {
+	var resp chassisResponse
+	err := c.get(ctx, c.endpoints().Chassis(), &resp)
 	if err != nil {
 		return nil, err
 	}

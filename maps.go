@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -18,16 +18,16 @@ const (
 
 // ==================== Switch Status Policy Report ====================
 
-// SwitchStatusPolicyReportResponse 是 GET /brocade-maps/switch-status-policy-report 的 XML 响应包装
-type SwitchStatusPolicyReportResponse struct {
+// switchStatusPolicyReportResponse 是 GET /brocade-maps/switch-status-policy-report 的 XML 响应包装
+type switchStatusPolicyReportResponse struct {
 	XMLName                  xml.Name                 `xml:"Response"`
-	SwitchStatusPolicyReport SwitchStatusPolicyReport `xml:"switch-status-policy-report"`
+	SwitchStatusPolicyReport switchStatusPolicyReport `xml:"switch-status-policy-report"`
 }
 
-// SwitchStatusPolicyReport 描述交换机各组件的健康状态策略报告（XML 原始结构），
+// switchStatusPolicyReport describes the wire representation returned by FOS.
 // 包含交换机整体健康度、电源、风扇、温度传感器、端口、SFP 等组件状态。
 // 对应 YANG 模型: brocade-maps/switch-status-policy-report
-type SwitchStatusPolicyReport struct {
+type switchStatusPolicyReport struct {
 	XMLName                     xml.Name     `xml:"switch-status-policy-report"`
 	SwitchHealth                SSPStateType `xml:"switch-health"`
 	PowerSupplyHealth           SSPStateType `xml:"power-supply-health"`
@@ -49,9 +49,9 @@ type SwitchStatusPolicyReport struct {
 	TrustedFOSCertificateHealth SSPStateType `xml:"trusted-fos-cert-health"`
 }
 
-// SwitchStatusPolicyReportInfo 是交换机健康状态策略报告的 JSON 友好表示，
-// 由 GetSwitchStatusPolicyReport 从 XML 响应中转换而来
-type SwitchStatusPolicyReportInfo struct {
+// SwitchStatus 是交换机健康状态策略报告的 JSON 友好表示，
+// 由交换机状态策略响应转换而来。
+type SwitchStatus struct {
 	SwitchStatus                SSPStateType `json:"switch_status"`
 	PowerSupplyHealth           SSPStateType `json:"power_supply_health"`
 	FanHealth                   SSPStateType `json:"fan_health"`
@@ -74,16 +74,16 @@ type SwitchStatusPolicyReportInfo struct {
 
 // ==================== System Resources ====================
 
-// SystemResourcesResponse 是 GET /brocade-maps/system-resources 的 XML 响应包装
-type SystemResourcesResponse struct {
+// systemResourcesResponse 是 GET /brocade-maps/system-resources 的 XML 响应包装
+type systemResourcesResponse struct {
 	XMLName         xml.Name        `xml:"Response"`
-	SystemResources SystemResources `xml:"system-resources"`
+	SystemResources systemResources `xml:"system-resources"`
 }
 
-// SystemResources 描述交换机系统资源使用情况（XML 原始结构），
+// systemResources describes the wire representation returned by FOS.
 // 包含 CPU、内存、Flash 使用率和可用内核内存。
 // 对应 YANG 模型: brocade-maps/system-resources
-type SystemResources struct {
+type systemResources struct {
 	XMLName          xml.Name `xml:"system-resources"`
 	CPUUsage         uint32   `xml:"cpu-usage"`
 	MemoryUsage      uint32   `xml:"memory-usage"`
@@ -92,9 +92,9 @@ type SystemResources struct {
 	FreeKernelMemory uint32   `xml:"free-kernel-memory"`
 }
 
-// SystemResourcesInfo 是交换机系统资源使用情况的 JSON 友好表示，
-// 由 GetSystemResources 从 XML 响应中转换而来
-type SystemResourcesInfo struct {
+// SystemResourcesSnapshot 是交换机系统资源使用情况的 JSON 友好表示，
+// 由系统资源响应转换而来。
+type SystemResourcesSnapshot struct {
 	CPUUsage         uint32 `json:"cpu_usage"`
 	MemoryUsage      uint32 `json:"memory_usage"`
 	TotalMemory      uint32 `json:"total_memory"`
@@ -104,22 +104,15 @@ type SystemResourcesInfo struct {
 
 // ==================== Client Methods ====================
 
-// GetSwitchStatusPolicyReport 获取交换机各组件的健康状态策略报告，
-// 包括交换机整体健康度、电源、风扇、温度传感器、端口、SFP 等状态。
-// 对应 API: GET /brocade-maps/switch-status-policy-report
-func (c *Client) GetSwitchStatusPolicyReport() (*SwitchStatusPolicyReportInfo, error) {
-	return c.GetSwitchStatusPolicyReportWithContext(context.Background())
-}
-
-// GetSwitchStatusPolicyReportWithContext 获取交换机健康状态策略报告并允许取消请求。
-func (c *Client) GetSwitchStatusPolicyReportWithContext(ctx context.Context) (*SwitchStatusPolicyReportInfo, error) {
-	var resp SwitchStatusPolicyReportResponse
-	err := c.GetWithContext(ctx, c.endpoints().SwitchStatusPolicyReport(), &resp)
+// SwitchStatus returns the switch health policy report.
+func (c *Client) SwitchStatus(ctx context.Context) (*SwitchStatus, error) {
+	var resp switchStatusPolicyReportResponse
+	err := c.get(ctx, c.endpoints().SwitchStatusPolicyReport(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SwitchStatusPolicyReportInfo{
+	return &SwitchStatus{
 		SwitchStatus:                resp.SwitchStatusPolicyReport.SwitchHealth,
 		PowerSupplyHealth:           resp.SwitchStatusPolicyReport.PowerSupplyHealth,
 		FanHealth:                   resp.SwitchStatusPolicyReport.FanHealth,
@@ -141,21 +134,15 @@ func (c *Client) GetSwitchStatusPolicyReportWithContext(ctx context.Context) (*S
 	}, nil
 }
 
-// GetSystemResources 获取交换机系统资源使用情况，包括 CPU、内存、Flash 使用率等。
-// 对应 API: GET /brocade-maps/system-resources
-func (c *Client) GetSystemResources() (*SystemResourcesInfo, error) {
-	return c.GetSystemResourcesWithContext(context.Background())
-}
-
-// GetSystemResourcesWithContext 获取系统资源使用情况并允许取消请求。
-func (c *Client) GetSystemResourcesWithContext(ctx context.Context) (*SystemResourcesInfo, error) {
-	var resp SystemResourcesResponse
-	err := c.GetWithContext(ctx, c.endpoints().SystemResources(), &resp)
+// SystemResources 获取系统资源使用情况并允许取消请求。
+func (c *Client) SystemResources(ctx context.Context) (*SystemResourcesSnapshot, error) {
+	var resp systemResourcesResponse
+	err := c.get(ctx, c.endpoints().SystemResources(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SystemResourcesInfo{
+	return &SystemResourcesSnapshot{
 		CPUUsage:         resp.SystemResources.CPUUsage,
 		MemoryUsage:      resp.SystemResources.MemoryUsage,
 		TotalMemory:      resp.SystemResources.TotalMemory,

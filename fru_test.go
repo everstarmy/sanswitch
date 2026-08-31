@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"errors"
@@ -15,13 +15,13 @@ func TestFRUHistoryLogAndSensorRequireFOS90(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v8.2.3"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v8.2.3"))
+	pointClientAt(t, c, ts.URL)
 
-	if _, err := c.GetHistoryLogs(); !errors.Is(err, ErrUnsupportedOperation) {
+	if _, err := c.HistoryLogs(t.Context()); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("expected ErrUnsupportedOperation for GetHistoryLogs, got %v", err)
 	}
-	if _, err := c.GetSensors(); !errors.Is(err, ErrUnsupportedOperation) {
+	if _, err := c.Sensors(t.Context()); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("expected ErrUnsupportedOperation for GetSensors, got %v", err)
 	}
 	if called {
@@ -47,17 +47,17 @@ func TestFRUHistoryLogAndSensorAllowFOS90(t *testing.T) {
 	})
 
 	ts := newMockFOS(t, mux)
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.0.0"))
-	c.baseURL = ts.URL + "/rest/running"
+	c := mustNewClient(t, "localhost", WithFOSVersion("v9.0.0"))
+	pointClientAt(t, c, ts.URL)
 
-	historyLogs, err := c.GetHistoryLogs()
+	historyLogs, err := c.HistoryLogs(t.Context())
 	if err != nil {
 		t.Fatalf("GetHistoryLogs() error: %v", err)
 	}
 	if len(historyLogs) != 1 {
 		t.Fatalf("expected 1 history log, got %d", len(historyLogs))
 	}
-	sensors, err := c.GetSensors()
+	sensors, err := c.Sensors(t.Context())
 	if err != nil {
 		t.Fatalf("GetSensors() error: %v", err)
 	}

@@ -1,26 +1,28 @@
-package san
+package sanswitch
 
 import (
 	"context"
 	"encoding/xml"
+	"errors"
+	"strings"
 )
 
-// DefinedConfigAPI 表示 Zone 定义配置中的 cfg（用于 XML 请求/响应序列化）
-type DefinedConfigAPI struct {
+// definedConfigAPI 表示 Zone 定义配置中的 cfg（用于 XML 请求/响应序列化）
+type definedConfigAPI struct {
 	XMLName     xml.Name `xml:"cfg"`
 	Name        string   `xml:"cfg-name"`
 	MemberZones []string `xml:"member-zone>zone-name"` // cfg 包含的 Zone 名称列表
 }
 
-// DefinedConfigResponse 是 GET /brocade-zone/defined-configuration/cfg 的 XML 响应包装
-type DefinedConfigResponse struct {
+// definedConfigResponse 是 GET /brocade-zone/defined-configuration/cfg 的 XML 响应包装
+type definedConfigResponse struct {
 	XMLName xml.Name           `xml:"Response"`
-	Configs []DefinedConfigAPI `xml:"cfg"`
+	Configs []definedConfigAPI `xml:"cfg"`
 }
 
-// EffectiveConfigAPI 表示已生效的 Zone 配置信息（用于 XML 响应序列化），
+// effectiveConfigAPI 表示已生效的 Zone 配置信息（用于 XML 响应序列化），
 // 包含配置名称、校验和、默认 Zone 访问策略、数据库容量和事务状态等字段。
-type EffectiveConfigAPI struct {
+type effectiveConfigAPI struct {
 	XMLName                xml.Name `xml:"effective-configuration"`
 	ConfigName             string   `xml:"cfg-name"`
 	Checksum               string   `xml:"checksum"`
@@ -36,29 +38,23 @@ type EffectiveConfigAPI struct {
 	DomainWithLowestDBMax  uint32   `xml:"domain-with-lowest-db-max"`
 }
 
-// EffectiveConfigResponse 是 GET /brocade-zone/effective-configuration 的 XML 响应包装
-type EffectiveConfigResponse struct {
+// effectiveConfigResponse 是 GET /brocade-zone/effective-configuration 的 XML 响应包装
+type effectiveConfigResponse struct {
 	XMLName xml.Name           `xml:"Response"`
-	Config  EffectiveConfigAPI `xml:"effective-configuration"`
+	Config  effectiveConfigAPI `xml:"effective-configuration"`
 }
 
-// GetDefinedConfigs 获取 Zone 定义配置中的所有 cfg 列表。
-// 对应 API: GET /brocade-zone/defined-configuration/cfg
-func (c *Client) GetDefinedConfigs() ([]ConfigInfo, error) {
-	return c.GetDefinedConfigsWithContext(context.Background())
-}
-
-// GetDefinedConfigsWithContext 获取 Zone 定义配置中的所有 cfg 列表。
-func (c *Client) GetDefinedConfigsWithContext(ctx context.Context) ([]ConfigInfo, error) {
-	var resp DefinedConfigResponse
-	err := c.GetWithContext(ctx, c.endpoints().DefinedConfigs(), &resp)
+// DefinedConfigs 获取 Zone 定义配置中的所有 cfg 列表。
+func (c *Client) DefinedConfigs(ctx context.Context) ([]ZoneConfig, error) {
+	var resp definedConfigResponse
+	err := c.get(ctx, c.endpoints().DefinedConfigs(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	var configs []ConfigInfo
+	var configs []ZoneConfig
 	for _, cfg := range resp.Configs {
-		configs = append(configs, ConfigInfo{
+		configs = append(configs, ZoneConfig{
 			Name:        cfg.Name,
 			Type:        "defined",
 			MemberZones: cfg.MemberZones,
@@ -68,21 +64,15 @@ func (c *Client) GetDefinedConfigsWithContext(ctx context.Context) ([]ConfigInfo
 	return configs, nil
 }
 
-// GetEffectiveConfig 获取当前已生效的 Zone 配置信息，包含配置名称、校验和、默认 Zone 访问策略。
-// 对应 API: GET /brocade-zone/effective-configuration
-func (c *Client) GetEffectiveConfig() (*ConfigInfo, error) {
-	return c.GetEffectiveConfigWithContext(context.Background())
-}
-
-// GetEffectiveConfigWithContext 获取当前已生效的 Zone 配置信息。
-func (c *Client) GetEffectiveConfigWithContext(ctx context.Context) (*ConfigInfo, error) {
-	var resp EffectiveConfigResponse
-	err := c.GetWithContext(ctx, c.endpoints().EffectiveConfig(), &resp)
+// EffectiveConfig 获取当前已生效的 Zone 配置信息。
+func (c *Client) EffectiveConfig(ctx context.Context) (*ZoneConfig, error) {
+	var resp effectiveConfigResponse
+	err := c.get(ctx, c.endpoints().EffectiveConfig(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return &ConfigInfo{
+	return &ZoneConfig{
 		Name:              resp.Config.ConfigName,
 		Type:              "effective",
 		Checksum:          resp.Config.Checksum,
@@ -90,21 +80,15 @@ func (c *Client) GetEffectiveConfigWithContext(ctx context.Context) (*ConfigInfo
 	}, nil
 }
 
-// GetZoneDatabaseInfo 获取 Zone 数据库的容量和事务状态信息。
-// 对应 API: GET /brocade-zone/effective-configuration
-func (c *Client) GetZoneDatabaseInfo() (*ZoneDatabaseInfo, error) {
-	return c.GetZoneDatabaseInfoWithContext(context.Background())
-}
-
-// GetZoneDatabaseInfoWithContext 获取 Zone 数据库的容量和事务状态信息。
-func (c *Client) GetZoneDatabaseInfoWithContext(ctx context.Context) (*ZoneDatabaseInfo, error) {
-	var resp EffectiveConfigResponse
-	err := c.GetWithContext(ctx, c.endpoints().EffectiveConfig(), &resp)
+// ZoneDatabase returns Zone database capacity and transaction information.
+func (c *Client) ZoneDatabase(ctx context.Context) (*ZoneDatabase, error) {
+	var resp effectiveConfigResponse
+	err := c.get(ctx, c.endpoints().EffectiveConfig(), &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return &ZoneDatabaseInfo{
+	return &ZoneDatabase{
 		DBMax:                  resp.Config.DBMax,
 		DBAvail:                resp.Config.DBAvail,
 		DBCommitted:            resp.Config.DBCommitted,
@@ -117,69 +101,52 @@ func (c *Client) GetZoneDatabaseInfoWithContext(ctx context.Context) (*ZoneDatab
 	}, nil
 }
 
-// GetZoneChecksum 获取当前 Zone 配置的校验和，用于后续的 Save/Activate 操作。
-// 对应 API: GET /brocade-zone/effective-configuration/checksum
-func (c *Client) GetZoneChecksum() (string, error) {
-	return c.GetZoneChecksumWithContext(context.Background())
-}
-
-// GetZoneChecksumWithContext 获取当前 Zone 配置的校验和。
-func (c *Client) GetZoneChecksumWithContext(ctx context.Context) (string, error) {
-	var resp EffectiveConfigResponse
-	err := c.GetWithContext(ctx, c.endpoints().ZoneChecksum(), &resp)
+// ZoneChecksum 获取当前 Zone 配置的校验和。
+func (c *Client) ZoneChecksum(ctx context.Context) (string, error) {
+	var resp effectiveConfigResponse
+	err := c.get(ctx, c.endpoints().ZoneChecksum(), &resp)
 	if err != nil {
 		return "", err
 	}
 	return resp.Config.Checksum, nil
 }
 
-// UpdateDefinedConfig 更新 Zone 定义配置中指定 cfg 的成员 Zone 列表。
-// 对应 API: PATCH /brocade-zone/defined-configuration/cfg
-func (c *Client) UpdateDefinedConfig(name string, memberZones []string) error {
-	return c.UpdateDefinedConfigWithContext(context.Background(), name, memberZones)
-}
-
-// UpdateDefinedConfigWithContext 更新指定 cfg 的成员 Zone 列表。
-func (c *Client) UpdateDefinedConfigWithContext(ctx context.Context, name string, memberZones []string) error {
-	payload := DefinedConfigAPI{
+// UpdateDefinedConfig 更新指定 cfg 的成员 Zone 列表。
+func (c *Client) UpdateDefinedConfig(ctx context.Context, name string, memberZones []string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("config name required")
+	}
+	payload := definedConfigAPI{
 		Name:        name,
 		MemberZones: memberZones,
 	}
-	return c.PatchWithContext(ctx, c.endpoints().DefinedConfigs(), payload)
+	return c.patch(ctx, c.endpoints().DefinedConfigs(), payload)
 }
 
-// PatchEffectiveConfigAPI 用于 Save/Activate Zone 配置操作的请求体
-type PatchEffectiveConfigAPI struct {
+// PatcheffectiveConfigAPI 用于 Save/Activate Zone 配置操作的请求体
+type patchEffectiveConfigAPI struct {
 	XMLName  xml.Name `xml:"checksum"`
 	Checksum string   `xml:",chardata"` // 当前配置校验和，用于防止并发修改冲突
 }
 
-// SaveZoneConfig 保存当前 Zone 定义配置到持久存储。
-// checksum 为当前有效配置的校验和，用于防止并发修改冲突。
-// 对应 API: PATCH /brocade-zone/effective-configuration/cfg-action-v2/save
-func (c *Client) SaveZoneConfig(checksum string) error {
-	return c.SaveZoneConfigWithContext(context.Background(), checksum)
-}
-
-// SaveZoneConfigWithContext 保存当前 Zone 定义配置。
-func (c *Client) SaveZoneConfigWithContext(ctx context.Context, checksum string) error {
-	payload := PatchEffectiveConfigAPI{
+// SaveZoneConfig 保存当前 Zone 定义配置。
+func (c *Client) SaveZoneConfig(ctx context.Context, checksum string) error {
+	if strings.TrimSpace(checksum) == "" {
+		return errors.New("zone checksum required")
+	}
+	payload := patchEffectiveConfigAPI{
 		Checksum: checksum,
 	}
-	return c.PatchWithContext(ctx, c.endpoints().ZoneSaveConfig(), payload)
+	return c.patch(ctx, c.endpoints().ZoneSaveConfig(), payload)
 }
 
-// ActivateZoneConfig 激活指定的 Zone 配置（cfg），使其成为当前生效配置。
-// checksum 为当前有效配置的校验和，用于防止并发修改冲突。
-// 对应 API: PATCH /brocade-zone/effective-configuration/cfg-name/{name}
-func (c *Client) ActivateZoneConfig(name string, checksum string) error {
-	return c.ActivateZoneConfigWithContext(context.Background(), name, checksum)
-}
-
-// ActivateZoneConfigWithContext 激活指定的 Zone 配置。
-func (c *Client) ActivateZoneConfigWithContext(ctx context.Context, name string, checksum string) error {
-	payload := PatchEffectiveConfigAPI{
+// ActivateZoneConfig 激活指定的 Zone 配置。
+func (c *Client) ActivateZoneConfig(ctx context.Context, name string, checksum string) error {
+	if strings.TrimSpace(name) == "" || strings.TrimSpace(checksum) == "" {
+		return errors.New("config name and zone checksum required")
+	}
+	payload := patchEffectiveConfigAPI{
 		Checksum: checksum,
 	}
-	return c.PatchWithContext(ctx, c.endpoints().ZoneActivateConfig(name), payload)
+	return c.patch(ctx, c.endpoints().ZoneActivateConfig(name), payload)
 }

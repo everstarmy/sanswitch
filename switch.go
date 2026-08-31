@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// FabricSwitchResponse 是 GET /brocade-fabric/fabric-switch 的 XML 响应包装
-type FabricSwitchResponse struct {
+// fabricSwitchResponse 是 GET /brocade-fabric/fabric-switch 的 XML 响应包装
+type fabricSwitchResponse struct {
 	XMLName  xml.Name       `xml:"Response"`
 	Switches []FabricSwitch `xml:"fabric-switch"`
 }
@@ -34,31 +34,19 @@ type FabricSwitch struct {
 	VFID                    int      `xml:"vf-id,omitempty" json:"vf_id,omitempty"`
 }
 
-// GetFabricSwitches 获取 Fabric 中所有交换机的详细信息
-// 对应 API: GET /brocade-fabric/fabric-switch
-func (c *Client) GetFabricSwitches() ([]FabricSwitch, error) {
-	return c.GetFabricSwitchesWithContext(context.Background())
-}
-
-// GetFabricSwitchesWithContext 获取 Fabric 中所有交换机的详细信息。
-func (c *Client) GetFabricSwitchesWithContext(ctx context.Context) ([]FabricSwitch, error) {
-	var resp FabricSwitchResponse
-	err := c.GetWithContext(ctx, c.endpoints().FabricSwitches(), &resp)
+// FabricSwitches 获取 Fabric 中所有交换机的详细信息。
+func (c *Client) FabricSwitches(ctx context.Context) ([]FabricSwitch, error) {
+	var resp fabricSwitchResponse
+	err := c.get(ctx, c.endpoints().FabricSwitches(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Switches, nil
 }
 
-// GetSwitchInfo 获取当前登录交换机的摘要信息。
-// 若 Fabric 中无交换机则返回 ErrNotFound
-func (c *Client) GetSwitchInfo() (*SwitchInfo, error) {
-	return c.GetSwitchInfoWithContext(context.Background())
-}
-
-// GetSwitchInfoWithContext 获取当前登录交换机的摘要信息。
-func (c *Client) GetSwitchInfoWithContext(ctx context.Context) (*SwitchInfo, error) {
-	switches, err := c.GetFabricSwitchesWithContext(ctx)
+// Switch returns summary information for the connected switch.
+func (c *Client) Switch(ctx context.Context) (*Switch, error) {
+	switches, err := c.FabricSwitches(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +56,7 @@ func (c *Client) GetSwitchInfoWithContext(ctx context.Context) (*SwitchInfo, err
 	}
 
 	sw := c.localFabricSwitch(switches)
-	return &SwitchInfo{
+	return &Switch{
 		Name:            sw.SwitchUserFriendlyName,
 		WWN:             sw.Name,
 		DomainID:        sw.DomainID,
@@ -85,7 +73,7 @@ func (c *Client) GetSwitchInfoWithContext(ctx context.Context) (*SwitchInfo, err
 }
 
 func (c *Client) localFabricSwitch(switches []FabricSwitch) FabricSwitch {
-	host := strings.TrimSpace(c.host)
+	host := strings.TrimSpace(c.switchAddress)
 	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
 		host = parsedHost
 	}

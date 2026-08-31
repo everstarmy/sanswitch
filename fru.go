@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -8,16 +8,16 @@ import (
 
 // ==================== Blade ====================
 
-// BladeResponse 是 GET /brocade-fru/blade 的 XML 响应包装
-type BladeResponse struct {
-	XMLName xml.Name    `xml:"Response"`
-	Blades  []BladeInfo `xml:"blade"`
+// bladeResponse 是 GET /brocade-fru/blade 的 XML 响应包装
+type bladeResponse struct {
+	XMLName xml.Name `xml:"Response"`
+	Blades  []Blade  `xml:"blade"`
 }
 
-// BladeInfo 描述一个 FRU 板卡的详细信息，包含插槽号、类型、状态、固件版本、
+// Blade 描述一个 FRU 板卡的详细信息，包含插槽号、类型、状态、固件版本、
 // 端口数量、功耗、温度、网络地址等字段。
 // 对应 YANG 模型: brocade-fru/blade
-type BladeInfo struct {
+type Blade struct {
 	XMLName                  xml.Name `xml:"blade" json:"-"`
 	SlotNumber               uint32   `xml:"slot-number" json:"slot_number"`
 	BladeType                string   `xml:"blade-type" json:"blade_type"`
@@ -75,16 +75,16 @@ type BladeInfo struct {
 
 // ==================== Fan ====================
 
-// FanResponse 是 GET /brocade-fru/fan 的 XML 响应包装
-type FanResponse struct {
-	XMLName xml.Name  `xml:"Response"`
-	Fans    []FanInfo `xml:"fan"`
+// fanResponse 是 GET /brocade-fru/fan 的 XML 响应包装
+type fanResponse struct {
+	XMLName xml.Name `xml:"Response"`
+	Fans    []Fan    `xml:"fan"`
 }
 
-// FanInfo 描述一个风扇单元的详细信息，包含类型、状态、风向、转速、
+// Fan 描述一个风扇单元的详细信息，包含类型、状态、风向、转速、
 // 功耗、序列号等字段。
 // 对应 YANG 模型: brocade-fru/fan
-type FanInfo struct {
+type Fan struct {
 	XMLName                 xml.Name `xml:"fan" json:"-"`
 	UnitNumber              uint32   `xml:"unit-number" json:"unit_number"`
 	FanType                 string   `xml:"fan-type" json:"fan_type"`
@@ -120,16 +120,16 @@ type FanInfo struct {
 
 // ==================== Power Supply ====================
 
-// PowerSupplyResponse 是 GET /brocade-fru/power-supply 的 XML 响应包装
-type PowerSupplyResponse struct {
-	XMLName       xml.Name          `xml:"Response"`
-	PowerSupplies []PowerSupplyInfo `xml:"power-supply"`
+// powerSupplyResponse 是 GET /brocade-fru/power-supply 的 XML 响应包装
+type powerSupplyResponse struct {
+	XMLName       xml.Name      `xml:"Response"`
+	PowerSupplies []PowerSupply `xml:"power-supply"`
 }
 
-// PowerSupplyInfo 描述一个电源单元的详细信息，包含类型、状态、输入/输出电压电流、
+// PowerSupply 描述一个电源单元的详细信息，包含类型、状态、输入/输出电压电流、
 // 功耗、温度、风扇转速、序列号等字段。
 // 对应 YANG 模型: brocade-fru/power-supply
-type PowerSupplyInfo struct {
+type PowerSupply struct {
 	XMLName                    xml.Name `xml:"power-supply" json:"-"`
 	UnitNumber                 uint32   `xml:"unit-number" json:"unit_number"`
 	PowerSupplyType            string   `xml:"power-supply-type" json:"power_supply_type"`
@@ -179,16 +179,16 @@ type PowerSupplyInfo struct {
 
 // ==================== History Log ====================
 
-// HistoryLogResponse 是 GET /brocade-fru/history-log 的 XML 响应包装
-type HistoryLogResponse struct {
-	XMLName     xml.Name         `xml:"Response"`
-	HistoryLogs []HistoryLogInfo `xml:"history-log"`
+// historyLogResponse 是 GET /brocade-fru/history-log 的 XML 响应包装
+type historyLogResponse struct {
+	XMLName     xml.Name     `xml:"Response"`
+	HistoryLogs []HistoryLog `xml:"history-log"`
 }
 
-// HistoryLogInfo 描述一条 FRU 历史日志记录，包含 FRU 类型、位置、状态、
+// HistoryLog 描述一条 FRU 历史日志记录，包含 FRU 类型、位置、状态、
 // 时间戳、序列号和部件号。
 // 对应 YANG 模型: brocade-fru/history-log
-type HistoryLogInfo struct {
+type HistoryLog struct {
 	XMLName      xml.Name `xml:"history-log" json:"-"`
 	FRUType      string   `xml:"fru-type" json:"fru_type"`
 	Position     uint16   `xml:"position" json:"position"`
@@ -200,16 +200,16 @@ type HistoryLogInfo struct {
 
 // ==================== Sensor ====================
 
-// SensorResponse 是 GET /brocade-fru/sensor 的 XML 响应包装
-type SensorResponse struct {
-	XMLName xml.Name     `xml:"Response"`
-	Sensors []SensorInfo `xml:"sensor"`
+// sensorResponse 是 GET /brocade-fru/sensor 的 XML 响应包装
+type sensorResponse struct {
+	XMLName xml.Name `xml:"Response"`
+	Sensors []Sensor `xml:"sensor"`
 }
 
-// SensorInfo 描述一个传感器（如温度传感器）的详细信息，包含 ID、插槽号、
+// Sensor 描述一个传感器（如温度传感器）的详细信息，包含 ID、插槽号、
 // 状态、类别、温度值及告警阈值等字段。
 // 对应 YANG 模型: brocade-fru/sensor
-type SensorInfo struct {
+type Sensor struct {
 	XMLName                 xml.Name `xml:"sensor" json:"-"`
 	ID                      uint16   `xml:"id" json:"id"`
 	SlotNumber              uint16   `xml:"slot-number" json:"slot_number"`
@@ -218,7 +218,7 @@ type SensorInfo struct {
 	Category                string   `xml:"category" json:"category"`
 	Temperature             uint16   `xml:"temperature" json:"temperature"`
 	TemperatureInFahrenheit int32    `xml:"temperature-in-fahrenheit" json:"temperature_in_fahrenheit"`
-	// Legacy fields (kept for backward compatibility with older FOS versions)
+	// Older Fabric OS releases report sensor details through these fields.
 	Name                    string `xml:"name" json:"name"`
 	Type                    string `xml:"sensor-type" json:"type"`
 	TypeString              string `xml:"sensor-type-string" json:"type_string"`
@@ -237,86 +237,56 @@ type SensorInfo struct {
 
 // ==================== Client Methods ====================
 
-// GetBlades 获取交换机上所有 FRU 板卡的详细信息。
-// 对应 API: GET /brocade-fru/blade
-func (c *Client) GetBlades() ([]BladeInfo, error) {
-	return c.GetBladesWithContext(context.Background())
-}
-
-// GetBladesWithContext 获取交换机上所有 FRU 板卡并允许取消请求。
-func (c *Client) GetBladesWithContext(ctx context.Context) ([]BladeInfo, error) {
-	var resp BladeResponse
-	err := c.GetWithContext(ctx, c.endpoints().Blades(), &resp)
+// Blades 获取交换机上所有 FRU 板卡并允许取消请求。
+func (c *Client) Blades(ctx context.Context) ([]Blade, error) {
+	var resp bladeResponse
+	err := c.get(ctx, c.endpoints().Blades(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Blades, nil
 }
 
-// GetFans 获取交换机上所有风扇单元的详细信息。
-// 对应 API: GET /brocade-fru/fan
-func (c *Client) GetFans() ([]FanInfo, error) {
-	return c.GetFansWithContext(context.Background())
-}
-
-// GetFansWithContext 获取交换机上所有风扇单元并允许取消请求。
-func (c *Client) GetFansWithContext(ctx context.Context) ([]FanInfo, error) {
-	var resp FanResponse
-	err := c.GetWithContext(ctx, c.endpoints().Fans(), &resp)
+// Fans 获取交换机上所有风扇单元并允许取消请求。
+func (c *Client) Fans(ctx context.Context) ([]Fan, error) {
+	var resp fanResponse
+	err := c.get(ctx, c.endpoints().Fans(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Fans, nil
 }
 
-// GetPowerSupplies 获取交换机上所有电源单元的详细信息。
-// 对应 API: GET /brocade-fru/power-supply
-func (c *Client) GetPowerSupplies() ([]PowerSupplyInfo, error) {
-	return c.GetPowerSuppliesWithContext(context.Background())
-}
-
-// GetPowerSuppliesWithContext 获取交换机上所有电源单元并允许取消请求。
-func (c *Client) GetPowerSuppliesWithContext(ctx context.Context) ([]PowerSupplyInfo, error) {
-	var resp PowerSupplyResponse
-	err := c.GetWithContext(ctx, c.endpoints().PowerSupplies(), &resp)
+// PowerSupplies 获取交换机上所有电源单元并允许取消请求。
+func (c *Client) PowerSupplies(ctx context.Context) ([]PowerSupply, error) {
+	var resp powerSupplyResponse
+	err := c.get(ctx, c.endpoints().PowerSupplies(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.PowerSupplies, nil
 }
 
-// GetHistoryLogs 获取 FRU 组件的历史日志记录。
-// 对应 API: GET /brocade-fru/history-log
-func (c *Client) GetHistoryLogs() ([]HistoryLogInfo, error) {
-	return c.GetHistoryLogsWithContext(context.Background())
-}
-
-// GetHistoryLogsWithContext 获取 FRU 历史日志并允许取消请求。
-func (c *Client) GetHistoryLogsWithContext(ctx context.Context) ([]HistoryLogInfo, error) {
+// HistoryLogs 获取 FRU 历史日志并允许取消请求。
+func (c *Client) HistoryLogs(ctx context.Context) ([]HistoryLog, error) {
 	if err := c.ensureFRUHistoryLogSensorSupported("FRU history-log"); err != nil {
 		return nil, err
 	}
-	var resp HistoryLogResponse
-	err := c.GetWithContext(ctx, c.endpoints().HistoryLogs(), &resp)
+	var resp historyLogResponse
+	err := c.get(ctx, c.endpoints().HistoryLogs(), &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.HistoryLogs, nil
 }
 
-// GetSensors 获取交换机上所有传感器的详细信息。
-// 对应 API: GET /brocade-fru/sensor
-func (c *Client) GetSensors() ([]SensorInfo, error) {
-	return c.GetSensorsWithContext(context.Background())
-}
-
-// GetSensorsWithContext 获取交换机上所有传感器并允许取消请求。
-func (c *Client) GetSensorsWithContext(ctx context.Context) ([]SensorInfo, error) {
+// Sensors 获取交换机上所有传感器并允许取消请求。
+func (c *Client) Sensors(ctx context.Context) ([]Sensor, error) {
 	if err := c.ensureFRUHistoryLogSensorSupported("FRU sensor"); err != nil {
 		return nil, err
 	}
-	var resp SensorResponse
-	err := c.GetWithContext(ctx, c.endpoints().Sensors(), &resp)
+	var resp sensorResponse
+	err := c.get(ctx, c.endpoints().Sensors(), &resp)
 	if err != nil {
 		return nil, err
 	}

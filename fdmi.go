@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"context"
@@ -7,16 +7,16 @@ import (
 
 // ==================== FDMI HBA ====================
 
-// FDMIHBAResponse 是 GET /brocade-fdmi/hba 的 XML 响应包装
-type FDMIHBAResponse struct {
-	XMLName xml.Name      `xml:"Response"`
-	HBAs    []FDMIHBAInfo `xml:"hba"`
+// fDMIHBAResponse 是 GET /brocade-fdmi/hba 的 XML 响应包装
+type fDMIHBAResponse struct {
+	XMLName xml.Name  `xml:"Response"`
+	HBAs    []FDMIHBA `xml:"hba"`
 }
 
-// FDMIHBAInfo 描述 FDMI（Fabric Device Management Interface）中注册的一个 HBA 适配器，
+// FDMIHBA 描述 FDMI（Fabric Device Management Interface）中注册的一个 HBA 适配器，
 // 包含 HBA ID、制造商、型号、序列号、固件版本、驱动版本、操作系统等字段。
 // 对应 YANG 模型: brocade-fdmi/hba
-type FDMIHBAInfo struct {
+type FDMIHBA struct {
 	XMLName            xml.Name `xml:"hba" json:"-"`
 	HBAID              string   `xml:"hba-id" json:"hba_id"`
 	DomainID           string   `xml:"domain-id" json:"domain_id"`
@@ -41,16 +41,10 @@ type FDMIHBAInfo struct {
 	HBAPortList        []string `xml:"hba-port-list>wwn" json:"hba_port_list"`
 }
 
-// GetFDMIHBAs 获取 FDMI 中注册的所有 HBA 适配器信息。
-// 对应 API: GET /brocade-fdmi/hba
-func (c *Client) GetFDMIHBAs() ([]FDMIHBAInfo, error) {
-	return c.GetFDMIHBAsWithContext(context.Background())
-}
-
-// GetFDMIHBAsWithContext 获取 FDMI HBA 信息并允许取消请求。
-func (c *Client) GetFDMIHBAsWithContext(ctx context.Context) ([]FDMIHBAInfo, error) {
-	var resp FDMIHBAResponse
-	err := c.GetWithContext(ctx, c.endpoints().FDMIHBAs(), &resp)
+// FDMIHBAs 获取 FDMI HBA 信息并允许取消请求。
+func (c *Client) FDMIHBAs(ctx context.Context) ([]FDMIHBA, error) {
+	var resp fDMIHBAResponse
+	err := c.get(ctx, c.endpoints().FDMIHBAs(), &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -59,16 +53,16 @@ func (c *Client) GetFDMIHBAsWithContext(ctx context.Context) ([]FDMIHBAInfo, err
 
 // ==================== FDMI Port ====================
 
-// FDMIResponse 是 GET /brocade-fdmi/port 的 XML 响应包装
-type FDMIResponse struct {
-	XMLName xml.Name       `xml:"Response"`
-	Ports   []FDMIPortInfo `xml:"port"`
+// fDMIResponse 是 GET /brocade-fdmi/port 的 XML 响应包装
+type fDMIResponse struct {
+	XMLName xml.Name   `xml:"Response"`
+	Ports   []FDMIPort `xml:"port"`
 }
 
-// FDMIPortInfo 描述 FDMI 中注册的一个 FC 端口，包含端口 WWN、所属 HBA、
+// FDMIPort 描述 FDMI 中注册的一个 FC 端口，包含端口 WWN、所属 HBA、
 // 端口类型、支持的协议速率、当前速率、最大帧大小、主机名、VSA 等字段。
 // 对应 YANG 模型: brocade-fdmi/port
-type FDMIPortInfo struct {
+type FDMIPort struct {
 	XMLName                    xml.Name `xml:"port" json:"-"`
 	PortName                   string   `xml:"port-name" json:"port_name"`
 	HBAID                      string   `xml:"hba-id" json:"hba_id"`
@@ -105,16 +99,10 @@ type FDMIPortInfo struct {
 	VSAEndToEndVersion         string   `xml:"vsa-end-to-end-version" json:"vsa_end_to_end_version"`
 }
 
-// GetFDMIPorts 获取 FDMI 中注册的所有 FC 端口信息。
-// 对应 API: GET /brocade-fdmi/port
-func (c *Client) GetFDMIPorts() ([]FDMIPortInfo, error) {
-	return c.GetFDMIPortsWithContext(context.Background())
-}
-
-// GetFDMIPortsWithContext 获取 FDMI 中注册的所有 FC 端口信息并允许取消请求。
-func (c *Client) GetFDMIPortsWithContext(ctx context.Context) ([]FDMIPortInfo, error) {
-	var resp FDMIResponse
-	err := c.GetWithContext(ctx, c.endpoints().FDMIPorts(), &resp)
+// FDMIPorts 获取 FDMI 中注册的所有 FC 端口信息并允许取消请求。
+func (c *Client) FDMIPorts(ctx context.Context) ([]FDMIPort, error) {
+	var resp fDMIResponse
+	err := c.get(ctx, c.endpoints().FDMIPorts(), &resp)
 	if err != nil {
 		return nil, err
 	}

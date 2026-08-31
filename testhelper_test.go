@@ -1,4 +1,4 @@
-package san
+package sanswitch
 
 import (
 	"net/http"
@@ -18,10 +18,28 @@ func newMockFOS(t *testing.T, mux *http.ServeMux) *httptest.Server {
 // newTestClient 创建一个指向测试服务器的 Client，跳过 Login。
 func newTestClient(t *testing.T, ts *httptest.Server) *Client {
 	t.Helper()
-	c := NewClient("localhost", "admin", "password", WithFOSVersion("v9.2.0"))
-	c.baseURL = ts.URL + "/rest/running"
-	return c
+	return mustNewClient(t, ts.URL, WithFOSVersion("v9.2.0"))
 }
+
+func mustNewClient(t *testing.T, endpoint string, opts ...ClientOption) *Client {
+	t.Helper()
+	client, err := New(endpoint, opts...)
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+	return client
+}
+
+func pointClientAt(t *testing.T, client *Client, endpoint string) {
+	t.Helper()
+	parsed, err := parseEndpoint(endpoint, false)
+	if err != nil {
+		t.Fatalf("parse endpoint: %v", err)
+	}
+	client.endpoint = parsed
+}
+
+var testCredentials = Credentials{Username: "admin", Password: "password"}
 
 // loginXML 是标准的 Login 响应 XML
 const loginXML = `<?xml version="1.0" encoding="UTF-8"?>
